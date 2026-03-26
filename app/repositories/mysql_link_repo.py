@@ -50,6 +50,23 @@ class LinkRepository(MySQLBaseRepository):
             "match_metadata": match_metadata,
         }
 
+    async def get_scholarship_ids_for_programs(
+        self,
+        program_ids: list[str],
+        min_confidence: float = 0.0,
+    ) -> list[str]:
+        """Distinct scholarship IDs linked to any of the given programs."""
+        if not program_ids:
+            return []
+        placeholders = ", ".join(["%s"] * len(program_ids))
+        query = f"""
+            SELECT DISTINCT scholarship_id FROM scholarship_program_links
+            WHERE program_id IN ({placeholders}) AND confidence_score >= %s
+        """
+        params = tuple(program_ids) + (min_confidence,)
+        rows = await self.execute_query(query, params)
+        return [row["scholarship_id"] for row in rows]
+
     async def get_by_program_id(
         self,
         program_id: str,

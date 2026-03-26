@@ -1,5 +1,9 @@
 """Tests for the eligibility filtering service."""
 
+# Exercises strict matching helpers that are intentionally private.
+
+# pylint: disable=protected-access
+
 from app.services.eligibility_filter_service import EligibilityFilterService
 
 
@@ -48,7 +52,11 @@ def test_fails_region_criterion():
 def test_meets_field_criterion():
     service = EligibilityFilterService()
     profile = {"field_of_study": "Computer Science"}
-    criterion = {"criterion_type": "field_of_study", "criterion_value": "Computer Science,Engineering", "is_mandatory": True}
+    criterion = {
+        "criterion_type": "field_of_study",
+        "criterion_value": "Computer Science,Engineering",
+        "is_mandatory": True,
+    }
     assert service._meets_criterion(profile, criterion) is True
 
 

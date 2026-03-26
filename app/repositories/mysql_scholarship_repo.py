@@ -54,6 +54,7 @@ class ScholarshipRepository(MySQLBaseRepository):
         self,
         provider: str | None = None,
         field: str | None = None,
+        scholarship_ids: list[str] | None = None,
         limit: int = 20,
         offset: int = 0,
     ) -> list[dict[str, Any]]:
@@ -69,6 +70,13 @@ class ScholarshipRepository(MySQLBaseRepository):
             conditions.append("MATCH(name, description) AGAINST(%s IN BOOLEAN MODE)")
             params.append(field)
 
+        if scholarship_ids is not None:
+            if not scholarship_ids:
+                return []
+            placeholders = ", ".join(["%s"] * len(scholarship_ids))
+            conditions.append(f"id IN ({placeholders})")
+            params.extend(scholarship_ids)
+
         where_clause = " AND ".join(conditions)
         params.extend([limit, offset])
 
@@ -80,7 +88,11 @@ class ScholarshipRepository(MySQLBaseRepository):
         """
         return await self.execute_query(query, tuple(params))
 
-    async def count_scholarships(self, provider: str | None = None) -> int:
+    async def count_scholarships(
+        self,
+        provider: str | None = None,
+        scholarship_ids: list[str] | None = None,
+    ) -> int:
         """Count scholarships matching filters."""
         conditions = ["is_active = TRUE"]
         params: list[Any] = []
@@ -88,6 +100,13 @@ class ScholarshipRepository(MySQLBaseRepository):
         if provider:
             conditions.append("provider LIKE %s")
             params.append(f"%{provider}%")
+
+        if scholarship_ids is not None:
+            if not scholarship_ids:
+                return 0
+            placeholders = ", ".join(["%s"] * len(scholarship_ids))
+            conditions.append(f"id IN ({placeholders})")
+            params.extend(scholarship_ids)
 
         where_clause = " AND ".join(conditions)
         query = f"SELECT COUNT(*) AS total FROM scholarships WHERE {where_clause}"

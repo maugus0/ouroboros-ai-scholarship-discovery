@@ -4,6 +4,7 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
 from app.config import settings
 from app.core.logging import get_logger
+from app.services.crawl_service import CrawlService
 
 logger = get_logger(__name__)
 
@@ -55,8 +56,6 @@ async def stop_scheduler() -> None:
 async def _batch_crawl_trigger() -> None:
     """Triggered by APScheduler to start a batch crawl of stale scholarships."""
     logger.info("batch_crawl_triggered")
-
-    from app.services.crawl_service import CrawlService
 
     crawl_service = CrawlService()
     job_id = await crawl_service.create_job({"job_type": "batch"})

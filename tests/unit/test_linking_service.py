@@ -1,5 +1,9 @@
 """Tests for the 4-dimension linking service."""
 
+# Exercises small scoring helpers that are intentionally private.
+
+# pylint: disable=protected-access
+
 from app.services.linking_service import LinkingService
 
 
@@ -71,6 +75,21 @@ def test_geographic_no_restriction():
     scholarship = {"eligibility_criteria": {}}
     program = {"country": "United States"}
     assert service._calc_geographic_match(scholarship, program) == 1.0
+
+
+def test_geographic_macro_region_match():
+    """Eligibility region macro-label (e.g. Asia) matches program country via region_mapping."""
+    service = LinkingService()
+    scholarship = {"eligibility_criteria": {"region": ["Asia"]}}
+    program = {"country": "India"}
+    assert service._calc_geographic_match(scholarship, program) == 1.0
+
+
+def test_geographic_macro_region_no_match():
+    service = LinkingService()
+    scholarship = {"eligibility_criteria": {"region": ["Asia"]}}
+    program = {"country": "Brazil"}
+    assert service._calc_geographic_match(scholarship, program) == 0.0
 
 
 def test_determine_link_type():

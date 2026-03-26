@@ -9,17 +9,9 @@ from app.config import settings
 from app.core.logging import get_logger
 from app.repositories.mysql_link_repo import LinkRepository
 from app.repositories.mysql_scholarship_repo import ScholarshipRepository
+from app.utils.region_mapping import entity_matches_region
 
 logger = get_logger(__name__)
-
-REGION_MAP = {
-    "asia": ["china", "india", "japan", "south korea", "singapore", "thailand", "vietnam"],
-    "europe": ["uk", "united kingdom", "germany", "france", "netherlands", "sweden", "switzerland"],
-    "north america": ["usa", "united states", "canada", "mexico"],
-    "south america": ["brazil", "argentina", "chile", "colombia"],
-    "oceania": ["australia", "new zealand"],
-    "africa": ["south africa", "nigeria", "kenya", "egypt"],
-}
 
 
 class LinkingService:
@@ -153,10 +145,19 @@ class LinkingService:
         program_degree = program_metadata.get("degree_type", "")
 
         degree_map = {
-            "bachelor": "bachelor", "undergraduate": "bachelor", "bsc": "bachelor", "ba": "bachelor",
-            "master": "master", "ms": "master", "msc": "master", "ma": "master",
-            "master_coursework": "master", "master_research": "master",
-            "phd": "phd", "doctoral": "phd", "doctorate": "phd",
+            "bachelor": "bachelor",
+            "undergraduate": "bachelor",
+            "bsc": "bachelor",
+            "ba": "bachelor",
+            "master": "master",
+            "ms": "master",
+            "msc": "master",
+            "ma": "master",
+            "master_coursework": "master",
+            "master_research": "master",
+            "phd": "phd",
+            "doctoral": "phd",
+            "doctorate": "phd",
         }
 
         normalized_program = degree_map.get(program_degree.lower(), program_degree.lower())
@@ -184,13 +185,7 @@ class LinkingService:
             return 0.5
 
         for region in scholarship_regions:
-            region_lower = region.lower()
-            country_lower = program_country.lower()
-
-            if region_lower in REGION_MAP:
-                if country_lower in REGION_MAP[region_lower]:
-                    return 1.0
-            elif region_lower == country_lower:
+            if entity_matches_region(program_country, region):
                 return 1.0
 
         return 0.0

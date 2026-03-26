@@ -2,7 +2,7 @@
 py-version = 3.11
 
 [BASIC]
-good-names=_pool,_client,i,j,k,_,exc,fd,Run,id
+good-names=_pool,_client,_scheduler,i,j,k,_,exc,fd,Run,id
 
 [FORMAT]
 max-line-length = 120

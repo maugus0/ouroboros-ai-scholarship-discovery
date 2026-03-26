@@ -4,7 +4,6 @@ from typing import Any
 
 from app.core.logging import get_logger
 from app.crawlers.parsers.html_parser import extract_basic_metadata, extract_page_text
-from app.llm.schemas import ExtractedScholarshipData
 from app.services.llm_service import LLMService
 from app.utils.exceptions import LLMExtractionError
 from app.utils.html_utils import truncate_text

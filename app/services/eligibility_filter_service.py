@@ -7,19 +7,9 @@ from typing import Any
 
 from app.core.logging import get_logger
 from app.repositories.mysql_eligibility_criteria_repo import EligibilityCriteriaRepository
+from app.utils.region_mapping import entity_matches_region
 
 logger = get_logger(__name__)
-
-REGION_MAP = {
-    "asia": ["china", "india", "japan", "south korea", "singapore", "thailand", "vietnam", "indonesia", "malaysia",
-             "philippines", "bangladesh", "pakistan", "sri lanka", "nepal", "myanmar", "cambodia", "taiwan"],
-    "europe": ["uk", "united kingdom", "germany", "france", "netherlands", "sweden", "norway", "denmark", "finland",
-               "spain", "italy", "portugal", "switzerland", "austria", "belgium", "ireland", "poland", "czech republic"],
-    "north america": ["usa", "united states", "canada", "mexico"],
-    "south america": ["brazil", "argentina", "chile", "colombia", "peru", "venezuela"],
-    "oceania": ["australia", "new zealand"],
-    "africa": ["south africa", "nigeria", "kenya", "egypt", "ghana", "ethiopia"],
-}
 
 
 class EligibilityFilterService:
@@ -57,6 +47,7 @@ class EligibilityFilterService:
 
     def _meets_criterion(self, profile: dict[str, Any], criterion: dict[str, Any]) -> bool:
         """Check if student meets a single criterion."""
+        # pylint: disable=too-many-return-statements,too-many-branches
         ctype = criterion["criterion_type"]
         value = criterion["criterion_value"]
 
@@ -109,13 +100,7 @@ class EligibilityFilterService:
     @staticmethod
     def _nationality_in_region(nationality: str, region: str) -> bool:
         """Check if nationality belongs to region."""
-        region_lower = region.lower()
-        nationality_lower = nationality.lower()
-
-        if region_lower in REGION_MAP:
-            return nationality_lower in REGION_MAP[region_lower]
-
-        return region_lower == nationality_lower
+        return entity_matches_region(nationality, region)
 
     @staticmethod
     def _meets_language_requirement(student_test: str, required_test: str) -> bool:
