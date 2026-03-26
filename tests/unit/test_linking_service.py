@@ -1,5 +1,9 @@
 """Tests for the 4-dimension linking service."""
 
+# Exercises small scoring helpers that are intentionally private.
+
+# pylint: disable=protected-access
+
 from app.services.linking_service import LinkingService
 
 

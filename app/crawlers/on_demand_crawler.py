@@ -9,7 +9,8 @@ from fake_useragent import UserAgent
 
 from app.config import settings
 from app.core.logging import get_logger
-from app.crawlers.parsers.html_parser import extract_links, extract_page_text
+from app.crawlers.parsers.html_parser import extract_links
+from app.crawlers.parsers.llm_parser import extract_scholarship_metadata
 from app.utils.html_utils import is_valid_url
 
 logger = get_logger(__name__)
@@ -44,8 +45,6 @@ async def crawl_scholarship_page(url: str) -> dict[str, Any] | None:
     html = await fetch_page(url)
     if html is None:
         return None
-
-    from app.crawlers.parsers.llm_parser import extract_scholarship_metadata
 
     metadata = await extract_scholarship_metadata(html, url)
     metadata["source_url"] = url

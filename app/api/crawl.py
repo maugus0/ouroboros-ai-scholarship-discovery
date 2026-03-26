@@ -37,7 +37,9 @@ async def trigger_crawl(request: CrawlRequest, background_tasks: BackgroundTasks
         background_tasks.add_task(service.execute_source_crawl, job_id, request.target_source)
 
     job = await service.get_job_status(job_id)
-    job_response = CrawlJobResponse(**job) if job else CrawlJobResponse(id=job_id, job_type=request.job_type, status="pending")
+    job_response = (
+        CrawlJobResponse(**job) if job else CrawlJobResponse(id=job_id, job_type=request.job_type, status="pending")
+    )
 
     return CrawlTriggerResponse(success=True, data=job_response, message="Crawl job created")
 

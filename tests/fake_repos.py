@@ -19,19 +19,44 @@ class FakeScholarshipRepository:
     async def get_by_id(self, scholarship_id: str) -> dict[str, Any] | None:
         return self._store.get(scholarship_id)
 
-    async def search_scholarships(self, provider=None, field=None, limit=20, offset=0) -> list[dict[str, Any]]:
+    async def search_scholarships(
+        self,
+        provider=None,
+        field=None,
+        scholarship_ids=None,
+        limit=20,
+        offset=0,
+    ) -> list[dict[str, Any]]:
         items = list(self._store.values())
         if provider:
             items = [s for s in items if provider.lower() in (s.get("provider") or "").lower()]
+        if field:
+            needle = field.lower()
+            items = [
+                s
+                for s in items
+                if needle in (s.get("name") or "").lower() or needle in (s.get("description") or "").lower()
+            ]
+        if scholarship_ids is not None:
+            if not scholarship_ids:
+                return []
+            allowed = set(scholarship_ids)
+            items = [s for s in items if s["id"] in allowed]
         return items[offset : offset + limit]
 
-    async def count_scholarships(self, provider=None) -> int:
+    async def count_scholarships(self, provider=None, scholarship_ids=None) -> int:
         items = list(self._store.values())
         if provider:
             items = [s for s in items if provider.lower() in (s.get("provider") or "").lower()]
+        if scholarship_ids is not None:
+            if not scholarship_ids:
+                return 0
+            allowed = set(scholarship_ids)
+            items = [s for s in items if s["id"] in allowed]
         return len(items)
 
     async def get_stale_scholarships(self, staleness_days=30) -> list[dict[str, Any]]:
+        _ = staleness_days
         return []
 
     async def update_scholarship(self, scholarship_id: str, updates: dict[str, Any]) -> int:
@@ -73,8 +98,7 @@ class FakeEligibilityCriteriaRepository:
 
     async def get_mandatory_by_scholarship_id(self, scholarship_id: str) -> list[dict[str, Any]]:
         return [
-            c for c in self._store.values()
-            if c.get("scholarship_id") == scholarship_id and c.get("is_mandatory", True)
+            c for c in self._store.values() if c.get("scholarship_id") == scholarship_id and c.get("is_mandatory", True)
         ]
 
     async def delete_by_scholarship_id(self, scholarship_id: str) -> int:
@@ -102,23 +126,38 @@ class FakeLinkRepository:
         }
         return self._store[link_id]
 
+    async def get_scholarship_ids_for_programs(self, program_ids, min_confidence=0.0) -> list[str]:
+        seen: set[str] = set()
+        out: list[str] = []
+        for row in self._store.values():
+            if row.get("program_id") not in program_ids:
+                continue
+            if row.get("confidence_score", 0) < min_confidence:
+                continue
+            sid = row.get("scholarship_id")
+            if sid and sid not in seen:
+                seen.add(sid)
+                out.append(sid)
+        return out
+
     async def get_by_program_id(self, program_id, min_confidence=0.0) -> list[dict[str, Any]]:
         return [
-            l for l in self._store.values()
-            if l.get("program_id") == program_id and l.get("confidence_score", 0) >= min_confidence
+            row
+            for row in self._store.values()
+            if row.get("program_id") == program_id and row.get("confidence_score", 0) >= min_confidence
         ]
 
     async def get_by_scholarship_id(self, scholarship_id) -> list[dict[str, Any]]:
-        return [l for l in self._store.values() if l.get("scholarship_id") == scholarship_id]
+        return [row for row in self._store.values() if row.get("scholarship_id") == scholarship_id]
 
     async def delete_by_scholarship_id(self, scholarship_id) -> int:
-        to_delete = [lid for lid, l in self._store.items() if l.get("scholarship_id") == scholarship_id]
+        to_delete = [lid for lid, row in self._store.items() if row.get("scholarship_id") == scholarship_id]
         for lid in to_delete:
             del self._store[lid]
         return len(to_delete)
 
     async def count_links(self, min_confidence=0.0) -> int:
-        return sum(1 for l in self._store.values() if l.get("confidence_score", 0) >= min_confidence)
+        return sum(1 for row in self._store.values() if row.get("confidence_score", 0) >= min_confidence)
 
 
 class FakeCrawlJobRepository:

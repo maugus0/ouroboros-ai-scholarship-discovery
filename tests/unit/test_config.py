@@ -1,5 +1,8 @@
 """Tests for application configuration."""
 
+# pylint: disable=import-outside-toplevel
+# Imports of ``settings`` are inside tests so each test can set env before load.
+
 import os
 
 

@@ -3,7 +3,7 @@
 from fastapi import APIRouter, Depends, Query
 
 from app.middleware.service_auth import require_service_token
-from app.models.linking import LinkRequest, LinkResponse
+from app.models.linking import LinkRequest
 from app.models.scholarship import ScholarshipResponse
 from app.repositories.mysql_link_repo import LinkRepository
 from app.repositories.mysql_scholarship_repo import ScholarshipRepository
