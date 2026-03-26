@@ -1,6 +1,7 @@
 """Eligibility Filtering Service.
 
 Filters scholarships based on strict binary matching against student profile.
+Criteria are loaded from the ``eligibility_criteria`` table (mandatory vs optional).
 """
 
 from typing import Any

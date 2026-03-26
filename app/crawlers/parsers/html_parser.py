@@ -1,4 +1,7 @@
-"""BeautifulSoup helpers for extracting scholarship data from HTML pages."""
+"""BeautifulSoup helpers for extracting scholarship data from HTML pages.
+
+Shared by Scrapy spiders and the on-demand crawler.
+"""
 
 import re
 from typing import Any, Optional

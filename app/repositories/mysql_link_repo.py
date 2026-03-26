@@ -55,7 +55,10 @@ class LinkRepository(MySQLBaseRepository):
         program_ids: list[str],
         min_confidence: float = 0.0,
     ) -> list[str]:
-        """Distinct scholarship IDs linked to any of the given programs."""
+        """Distinct scholarship IDs linked to any of the given programs.
+
+        Used by ``ScholarshipService.search`` when ``program_ids`` is set on the API request.
+        """
         if not program_ids:
             return []
         placeholders = ", ".join(["%s"] * len(program_ids))

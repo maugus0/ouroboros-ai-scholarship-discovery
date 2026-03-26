@@ -1,4 +1,7 @@
-"""Scrapy spider for crawling university financial aid and scholarship pages."""
+"""Scrapy spider for crawling university financial aid and scholarship pages.
+
+Analogous to Program Discovery ``ProgramDetailSpider`` (deep single-page scrape).
+"""
 
 import scrapy
 

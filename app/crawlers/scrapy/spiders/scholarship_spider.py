@@ -1,4 +1,7 @@
-"""Scrapy spider for batch-crawling scholarship database listing pages."""
+"""Scrapy spider for batch-crawling scholarship database listing pages.
+
+Follows the same ``kwargs.pop('start_urls')`` pattern as Program Discovery ``UniversitySpider``.
+"""
 
 import scrapy
 

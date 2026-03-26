@@ -1,4 +1,4 @@
-"""Tests for the eligibility filtering service."""
+"""Tests for the eligibility filtering service (mandatory criteria, regions, language scores)."""
 
 # Exercises strict matching helpers that are intentionally private.
 

@@ -1,4 +1,4 @@
-"""Tests for the 4-dimension linking service."""
+"""Tests for the 4-dimension linking service (university, field, degree, geographic)."""
 
 # Exercises small scoring helpers that are intentionally private.
 

@@ -58,7 +58,10 @@ class ScholarshipRepository(MySQLBaseRepository):
         limit: int = 20,
         offset: int = 0,
     ) -> list[dict[str, Any]]:
-        """Search scholarships with optional filters."""
+        """Search scholarships with optional filters.
+
+        When ``scholarship_ids`` is set, results are restricted to that ID set (AND with other filters).
+        """
         conditions = ["is_active = TRUE"]
         params: list[Any] = []
 
@@ -93,7 +96,7 @@ class ScholarshipRepository(MySQLBaseRepository):
         provider: str | None = None,
         scholarship_ids: list[str] | None = None,
     ) -> int:
-        """Count scholarships matching filters."""
+        """Count scholarships matching the same filters as :meth:`search_scholarships`."""
         conditions = ["is_active = TRUE"]
         params: list[Any] = []
 

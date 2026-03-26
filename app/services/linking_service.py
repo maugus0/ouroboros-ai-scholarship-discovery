@@ -1,6 +1,7 @@
 """4-Dimension Scholarship-Program Linking Service.
 
 Calculates confidence scores across university, field, degree, and geographic dimensions.
+Geographic scoring uses :func:`app.utils.region_mapping.entity_matches_region`.
 """
 
 from typing import Any, Optional

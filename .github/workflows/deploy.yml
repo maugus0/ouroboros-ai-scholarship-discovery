@@ -1,4 +1,5 @@
 # OuroborosAI Scholarship Discovery — CI/CD (GitHub Actions)
+# Tracker: ORB-14 (repository setup; pipeline parity with other Ouroboros agents).
 #
 # Action major tags (verify on GitHub releases):
 #   actions/checkout@v6 — https://github.com/actions/checkout/releases

@@ -1,4 +1,4 @@
-"""Tests for custom exception hierarchy."""
+"""Tests for custom exception hierarchy (including scholarship-specific errors)."""
 
 from app.utils.exceptions import (
     CrawlError,

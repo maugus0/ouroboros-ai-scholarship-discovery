@@ -1,6 +1,7 @@
 """Region-to-country mappings for eligibility checks and geographic linking.
 
 Single source of truth used by ``EligibilityFilterService`` and ``LinkingService``.
+Macro-region keys (e.g. ``asia``) are normalized with :func:`entity_matches_region`.
 """
 
 from __future__ import annotations

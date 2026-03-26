@@ -1,4 +1,7 @@
-"""Scrapy middlewares for user-agent rotation and retry logic."""
+"""Scrapy middlewares for user-agent rotation and retry logic.
+
+``RetryMiddleware`` matches Program Discovery: compatible with Scrapy 2.11+ ``_retry`` signatures.
+"""
 
 import inspect
 import random
