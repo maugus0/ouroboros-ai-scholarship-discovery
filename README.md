@@ -62,6 +62,7 @@ Both agents are sibling microservices: same **FastAPI + aiomysql + repository pa
 | **Core tables** | `universities`, `programs`, `program_requirements` | `scholarships`, `eligibility_criteria`, `scholarship_program_links` |
 | **Shared tables** | `crawl_jobs`, `llm_call_logs` | Same (column names adapted for scholarships) |
 | **Primary API surface** | `/api/v1/programs/*` | `/api/v1/scholarships/*` plus `/by-program/{program_id}` and link endpoints |
+| **Search filters** | Field, degree, university, ranking pipeline | Optional **provider**; optional **program_ids** (via links table); optional **student_profile** for eligibility |
 | **Ranking / scoring** | Multi-factor **program ranking** (field, requirements, university rank, deadline, tuition) | **Scholarship–program linking** confidence (university, field, degree, geography) plus **eligibility** filtering for students |
 | **Orchestrator contract** | Search/rank programs for a student | Search/filter scholarships; accept **program metadata in payload** for linking (no direct call to Program Discovery) |
 | **Repositories** | University, program, requirement, crawl job, LLM log | Scholarship, eligibility criteria, link, crawl job, LLM log |
@@ -142,6 +143,8 @@ Both agents are sibling microservices: same **FastAPI + aiomysql + repository pa
 - **Dual Crawling Strategy**: Scrapy batch crawls + BeautifulSoup on-demand
 - **LLM-Assisted Extraction**: OpenAI (gpt-4o-mini) primary, Anthropic (claude-sonnet-4) fallback
 - **4-Dimension Linking**: University (50%), Field (30%), Degree (15%), Geographic (5%) confidence scoring
+- **Program-scoped search**: Optional `program_ids` on `POST /api/v1/scholarships/search` limits results to scholarships linked in `scholarship_program_links`
+- **Centralized region data**: `app/utils/region_mapping.py` backs eligibility `region` criteria and the geographic linking dimension
 - **Eligibility Filtering**: Strict binary matching against student profiles (mandatory vs preferred criteria)
 - **Scheduled Crawls**: APScheduler for weekly batch updates (Sunday 3 AM UTC)
 - **Service Auth**: X-Service-Token middleware (orchestrator-only access)
@@ -387,6 +390,8 @@ All endpoints except health checks require the `X-Service-Token` header.
 }
 ```
 
+`student_profile` is optional; when omitted, search skips the eligibility filter. `provider` is optional (substring match). When `program_ids` is non-empty, only scholarships with rows in `scholarship_program_links` for those program IDs are returned (pagination applies after that filter).
+
 ### Scholarship-Program Linking
 
 | Method | Path | Auth | Description |
@@ -442,7 +447,7 @@ This is the **key differentiator** from Program Discovery Agent. When the Orches
 | **University Match** | 50% | Direct match: scholarship provider == program university |
 | **Field Match** | 30% | Subject classification overlap (keyword-based + Jaccard similarity) |
 | **Degree Match** | 15% | Bachelor / Master / PhD alignment |
-| **Geographic Match** | 5% | Region/nationality restrictions vs program country |
+| **Geographic Match** | 5% | Region/nationality restrictions vs program country (macro-regions via `app/utils/region_mapping.py`) |
 
 ### Formula
 
@@ -482,6 +487,8 @@ Strict binary matching: student must meet **ALL mandatory** criteria to be eligi
 
 Non-mandatory criteria (preferred/recommended) are **not** blocking.
 
+Macro-region labels for `region` criteria use the same country lists as geographic linking (`app/utils/region_mapping.py`); extend that module to add countries or regions consistently.
+
 ---
 
 ## Crawling Strategy
@@ -495,7 +502,7 @@ Non-mandatory criteria (preferred/recommended) are **not** blocking.
 ### On-demand mode (httpx + BeautifulSoup)
 
 - **Trigger**: Orchestrator POST to `/api/v1/scholarships/crawl`
-- **Use case**: Targeted scrape for specific scholarship URL
+- **Use case**: On-demand scrape for a `target_url`, or a listing/source page via `target_source` (discovers child links, then crawls each)
 
 ### Ethics and rate limiting
 
@@ -575,7 +582,7 @@ tests/
 
 ## CI/CD Pipeline
 
-**Workflow**: `.github/workflows/deploy.yml`
+**Workflow**: `.github/workflows/deploy.yml` (header comments reference **ORB-14** for alignment with platform-wide setup tickets)
 
 **Trigger**: Pull requests to `main` or `develop`
 
@@ -655,7 +662,7 @@ ouroboros-ai-scholarship-discovery/
 │   ├── crawlers/                       # Web crawling layer
 │   │   ├── scrapy/                    # Batch crawling
 │   │   │   ├── spiders/              # Scrapy spider classes
-│   │   │   ├── middlewares.py        # User-agent rotation
+│   │   │   ├── middlewares.py        # User-agent rotation + Scrapy 2.11+ compatible retry
 │   │   │   ├── pipelines.py         # Data validation + storage
 │   │   │   └── settings.py          # Scrapy config
 │   │   ├── parsers/                   # Page parsing
@@ -697,7 +704,8 @@ ouroboros-ai-scholarship-discovery/
 │   │   ├── helpers.py               # generate_uuid, timestamps
 │   │   ├── timezone.py              # UTC helpers
 │   │   ├── prompt_utils.py          # JSON template loading
-│   │   └── html_utils.py            # URL validation, text cleaning
+│   │   ├── html_utils.py            # URL validation, text cleaning
+│   │   └── region_mapping.py       # Region ↔ country lists (eligibility + linking)
 │   ├── config.py                       # Pydantic settings
 │   └── main.py                         # FastAPI app with lifespan
 ├── migrations/                         # SQL migration files (001-005)
