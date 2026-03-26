@@ -1,0 +1,20 @@
+CREATE TABLE IF NOT EXISTS scholarships (
+    id VARCHAR(36) PRIMARY KEY,
+    name VARCHAR(500) NOT NULL,
+    provider VARCHAR(255) NOT NULL,
+    funding_amount DECIMAL(10, 2) NULL,
+    currency VARCHAR(3) DEFAULT 'USD',
+    deadline DATE NULL,
+    description TEXT NULL,
+    eligibility_criteria JSON NULL,
+    application_requirements JSON NULL,
+    source_url VARCHAR(500) NOT NULL,
+    crawled_at TIMESTAMP NOT NULL,
+    is_active BOOLEAN DEFAULT TRUE,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    INDEX idx_provider (provider),
+    INDEX idx_deadline (deadline),
+    INDEX idx_crawled_at (crawled_at),
+    FULLTEXT INDEX ft_name_description (name, description)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

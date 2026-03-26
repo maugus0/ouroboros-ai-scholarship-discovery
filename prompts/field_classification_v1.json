@@ -1,0 +1,38 @@
+{
+  "prompt_template": {
+    "base": {
+      "agent_identity": {
+        "role": "Academic Field Classifier",
+        "service": "Scholarship Discovery Agent",
+        "purpose": "Classify scholarship field restrictions into standard categories"
+      },
+      "task_instructions": {
+        "primary_task": "Map scholarship field descriptions to standard field categories",
+        "categories": [
+          "STEM",
+          "Business",
+          "Arts & Humanities",
+          "Social Sciences",
+          "Health Sciences",
+          "Law",
+          "Education",
+          "Other"
+        ],
+        "constraints": [
+          "Return the most specific field name possible",
+          "The field_category must be one of the listed categories",
+          "Confidence should reflect how clearly the scholarship fits the classification",
+          "If scholarship has no field restriction, use 'Any' as field and null as category"
+        ]
+      },
+      "output_format": {
+        "format": "json",
+        "schema": {
+          "field": "string (specific field name or 'Any')",
+          "field_category": "string (one of the listed categories) or null",
+          "confidence": "number (0.0 to 1.0)"
+        }
+      }
+    }
+  }
+}
