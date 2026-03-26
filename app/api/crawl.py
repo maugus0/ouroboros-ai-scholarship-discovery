@@ -1,4 +1,7 @@
-"""Crawl trigger and status endpoints."""
+"""Crawl trigger and status endpoints.
+
+Mirrors Program Discovery crawl routes, namespaced under ``/api/v1/scholarships``.
+"""
 
 from fastapi import APIRouter, BackgroundTasks, Depends
 

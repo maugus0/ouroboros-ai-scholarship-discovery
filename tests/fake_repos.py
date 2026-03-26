@@ -1,4 +1,7 @@
-"""In-memory fake repositories for unit testing without a database."""
+"""In-memory fake repositories for unit testing without a database.
+
+Implements the same method shapes as production repos used in unit tests.
+"""
 
 from typing import Any
 

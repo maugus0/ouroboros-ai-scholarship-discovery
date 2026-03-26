@@ -1,4 +1,7 @@
-"""LLM-assisted scholarship data extraction from HTML content."""
+"""LLM-assisted scholarship data extraction from HTML content.
+
+Falls back to :func:`extract_basic_metadata` when the LLM path fails.
+"""
 
 from typing import Any
 

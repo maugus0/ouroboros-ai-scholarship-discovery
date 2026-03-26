@@ -1,4 +1,7 @@
-"""Scholarship-program linking endpoints."""
+"""Scholarship-program linking endpoints.
+
+``program_id`` values are orchestrator-supplied opaque IDs (not a foreign key to Program Discovery DB).
+"""
 
 from fastapi import APIRouter, Depends, Query
 

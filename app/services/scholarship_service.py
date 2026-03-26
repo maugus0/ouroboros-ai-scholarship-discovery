@@ -24,7 +24,11 @@ class ScholarshipService:
         limit: int = 20,
         offset: int = 0,
     ) -> dict[str, Any]:
-        """Search scholarships with optional filters."""
+        """Search scholarships with optional filters.
+
+        If ``program_ids`` is provided, only scholarships linked to those programs (via
+        ``scholarship_program_links``) are included. Pagination applies after that filter.
+        """
         scholarship_ids: list[str] | None = None
         if program_ids:
             scholarship_ids = await self.link_repo.get_scholarship_ids_for_programs(program_ids)

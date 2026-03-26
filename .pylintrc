@@ -1,3 +1,5 @@
+# Pylint configuration aligned with Program Discovery Agent (shared backend standards).
+
 [MAIN]
 py-version = 3.11
 

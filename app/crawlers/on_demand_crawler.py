@@ -1,4 +1,7 @@
-"""On-demand web crawler using httpx + BeautifulSoup for targeted scraping."""
+"""On-demand web crawler using httpx + BeautifulSoup for targeted scraping.
+
+Used for single-URL and listing-page discovery flows invoked by ``CrawlService``.
+"""
 
 import asyncio
 import random

@@ -1,4 +1,7 @@
-"""APScheduler-based periodic crawl scheduling."""
+"""APScheduler-based periodic crawl scheduling.
+
+Registers the weekly batch job using ``settings.BATCH_CRAWL_CRON`` (same pattern as Program Discovery).
+"""
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
