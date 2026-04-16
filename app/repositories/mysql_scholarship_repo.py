@@ -13,6 +13,20 @@ logger = get_logger(__name__)
 class ScholarshipRepository(MySQLBaseRepository):
     """CRUD operations on the ``scholarships`` table."""
 
+    _PERSISTED_FIELDS = {
+        "name",
+        "provider",
+        "funding_amount",
+        "currency",
+        "deadline",
+        "description",
+        "eligibility_criteria",
+        "application_requirements",
+        "source_url",
+        "crawled_at",
+        "is_active",
+    }
+
     async def create_scholarship(self, data: dict[str, Any]) -> str:
         """Insert a new scholarship and return its UUID."""
         scholarship_id = data.get("id") or generate_uuid()
@@ -32,7 +46,7 @@ class ScholarshipRepository(MySQLBaseRepository):
             data["name"],
             data["provider"],
             data.get("funding_amount"),
-            data.get("currency", "USD"),
+            data.get("currency"),
             data.get("deadline"),
             data.get("description"),
             json.dumps(data.get("eligibility_criteria")) if data.get("eligibility_criteria") else None,
@@ -49,6 +63,11 @@ class ScholarshipRepository(MySQLBaseRepository):
         """Retrieve a scholarship by UUID."""
         query = "SELECT * FROM scholarships WHERE id = %s"
         return await self.execute_one(query, (scholarship_id,))
+
+    async def get_by_source_url(self, source_url: str) -> dict[str, Any] | None:
+        """Retrieve a scholarship by its canonical source URL."""
+        query = "SELECT * FROM scholarships WHERE source_url = %s LIMIT 1"
+        return await self.execute_one(query, (source_url,))
 
     async def search_scholarships(
         self,
@@ -131,15 +150,29 @@ class ScholarshipRepository(MySQLBaseRepository):
         if not updates:
             return 0
         json_fields = {"eligibility_criteria", "application_requirements"}
+        filtered_updates = {}
+        for key, value in updates.items():
+            if key not in self._PERSISTED_FIELDS:
+                continue
+            if value is None:
+                continue
+            if isinstance(value, str) and not value.strip():
+                continue
+            if isinstance(value, (dict, list)) and not value:
+                continue
+            filtered_updates[key] = value
+        if not filtered_updates:
+            logger.info("scholarship_update_skipped_no_persisted_fields", scholarship_id=scholarship_id)
+            return 0
         set_clauses = []
         params: list[Any] = []
-        for key, value in updates.items():
+        for key, value in filtered_updates.items():
             set_clauses.append(f"{key} = %s")
             params.append(json.dumps(value) if key in json_fields else value)
         params.append(scholarship_id)
         query = f"UPDATE scholarships SET {', '.join(set_clauses)} WHERE id = %s"
         rows = await self.execute_write(query, tuple(params))
-        logger.info("scholarship_updated", scholarship_id=scholarship_id, fields=list(updates.keys()))
+        logger.info("scholarship_updated", scholarship_id=scholarship_id, fields=list(filtered_updates.keys()))
         return rows
 
     async def deactivate_scholarship(self, scholarship_id: str) -> int:

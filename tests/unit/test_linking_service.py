@@ -18,7 +18,7 @@ def test_university_match_partial():
     service = LinkingService()
     scholarship = {"provider": "Massachusetts Institute of Technology"}
     program = {"university_name": "MIT"}
-    assert service._calc_university_match(scholarship, program) == 0.0
+    assert service._calc_university_match(scholarship, program) == 1.0
 
 
 def test_university_match_substring():
@@ -49,10 +49,40 @@ def test_field_match_exact():
     assert service._calc_field_match(scholarship, program) == 1.0
 
 
+def test_field_match_from_parsed_criteria():
+    service = LinkingService()
+    scholarship = {
+        "eligibility_criteria": {
+            "parsed_criteria": [
+                {
+                    "criterion_type": "field_of_study",
+                    "criterion_value": "Engineering, Computer Science",
+                    "is_mandatory": True,
+                }
+            ]
+        }
+    }
+    program = {"field": "Computer Science"}
+    assert service._calc_field_match(scholarship, program) == 1.0
+
+
 def test_degree_match_exact():
     service = LinkingService()
     scholarship = {"eligibility_criteria": {"degree_level": ["master"]}}
     program = {"degree_type": "master"}
+    assert service._calc_degree_match(scholarship, program) == 1.0
+
+
+def test_degree_match_from_comma_separated_criterion():
+    service = LinkingService()
+    scholarship = {
+        "eligibility_criteria": {
+            "parsed_criteria": [
+                {"criterion_type": "degree_level", "criterion_value": "master, phd", "is_mandatory": True}
+            ]
+        }
+    }
+    program = {"degree_type": "master_coursework"}
     assert service._calc_degree_match(scholarship, program) == 1.0
 
 
@@ -85,6 +115,19 @@ def test_geographic_macro_region_match():
     assert service._calc_geographic_match(scholarship, program) == 1.0
 
 
+def test_geographic_nationality_country_match_from_parsed_criteria():
+    service = LinkingService()
+    scholarship = {
+        "eligibility_criteria": {
+            "parsed_criteria": [
+                {"criterion_type": "nationality", "criterion_value": "Yemen", "is_mandatory": True}
+            ]
+        }
+    }
+    program = {"country": "Yemen"}
+    assert service._calc_geographic_match(scholarship, program) == 1.0
+
+
 def test_geographic_macro_region_no_match():
     service = LinkingService()
     scholarship = {"eligibility_criteria": {"region": ["Asia"]}}
@@ -98,3 +141,14 @@ def test_determine_link_type():
     assert service._determine_link_type(0.0, 1.0, 0.3, 0.1) == "field"
     assert service._determine_link_type(0.0, 0.0, 1.0, 0.1) == "degree"
     assert service._determine_link_type(0.0, 0.0, 0.0, 1.0) == "geographic"
+
+
+def test_calculate_composite_confidence_uses_weighted_average():
+    service = LinkingService()
+    confidence = service._calculate_composite_confidence(
+        university_score=1.0,
+        field_score=0.5,
+        degree_score=1.0,
+        geographic_score=0.0,
+    )
+    assert confidence == 0.80

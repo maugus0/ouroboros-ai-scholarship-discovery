@@ -1,7 +1,8 @@
 """Scrapy pipelines for data validation and database storage."""
 
 from scrapy.exceptions import DropItem
-
+import asyncio
+from app.services.crawl_service import CrawlService
 from app.core.logging import get_logger
 
 logger = get_logger(__name__)
@@ -35,11 +36,38 @@ class StoreScholarshipPipeline:
 
     def __init__(self):
         self.items: list[dict] = []
+        self.crawl_service = CrawlService()
 
-    def process_item(self, item, spider):  # pylint: disable=unused-argument
+    def process_item(self, item, spider):
         self.items.append(dict(item))
         logger.info("scholarship_item_queued", scholarship_name=item.get("name"))
         return item
 
     def close_spider(self, spider):
-        logger.info("spider_closed", spider=spider.name, items_queued=len(self.items))
+        logger.info("spider_closed_processing", spider=spider.name, items_queued=len(self.items))
+        if not self.items:
+            return
+
+        active_programs = spider.settings.get("ACTIVE_PROGRAMS", [])
+
+        try:
+            loop = asyncio.get_event_loop()
+        except RuntimeError:
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+
+        async def process_all():
+            semaphore = asyncio.Semaphore(5)
+            async def process(item):
+                async with semaphore:
+                    try:
+                        await self.crawl_service._process_scraped_item(item, active_programs)
+                    except Exception as e:
+                        logger.error(f"Pipeline processing failed: {e}")
+
+            await asyncio.gather(*(process(item) for item in self.items))
+
+        if loop.is_running():
+            loop.create_task(process_all())
+        else:
+            loop.run_until_complete(process_all())

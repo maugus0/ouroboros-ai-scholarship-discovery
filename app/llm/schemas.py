@@ -11,7 +11,7 @@ class ExtractedScholarshipData(BaseModel):
     name: Optional[str] = None
     provider: Optional[str] = None
     funding_amount: Optional[float] = None
-    currency: Optional[str] = "USD"
+    currency: Optional[str] = None
     deadline: Optional[str] = None
     description: Optional[str] = None
     eligibility_criteria: Optional[dict] = None

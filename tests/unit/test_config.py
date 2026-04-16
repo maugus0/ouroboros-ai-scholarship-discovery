@@ -53,3 +53,17 @@ def test_confidence_threshold():
     from app.config import settings
 
     assert 0.0 <= settings.MIN_LINK_CONFIDENCE_SCORE <= 1.0
+
+
+def test_get_batch_crawl_sources_parses_comma_separated_values(monkeypatch):
+    from app.config import settings
+
+    monkeypatch.setenv(
+        "BATCH_CRAWL_SOURCES",
+        "https://site-a.example/scholarships, https://site-b.example/funding ,,",
+    )
+
+    assert settings.get_batch_crawl_sources() == [
+        "https://site-a.example/scholarships",
+        "https://site-b.example/funding",
+    ]

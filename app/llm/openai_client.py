@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 """OpenAI API client with retry logic."""
 
 import json
@@ -71,3 +73,4 @@ async def call_openai(
         "input_tokens": usage.prompt_tokens if usage else None,
         "output_tokens": usage.completion_tokens if usage else None,
     }
+

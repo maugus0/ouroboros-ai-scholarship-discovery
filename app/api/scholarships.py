@@ -1,5 +1,8 @@
 """Scholarship search and retrieval endpoints."""
 
+import json
+from typing import Any
+
 from fastapi import APIRouter, Depends
 
 from app.middleware.service_auth import require_service_token
@@ -15,6 +18,40 @@ from app.services.scholarship_service import ScholarshipService
 from app.utils.exceptions import NotFoundError
 
 router = APIRouter(prefix="/api/v1/scholarships", tags=["Scholarships"], dependencies=[Depends(require_service_token)])
+
+
+def _json_field(value: Any) -> dict[str, Any] | None:
+    """Decode MySQL JSON/TEXT values before returning API responses."""
+    if value in (None, "", {}, []):
+        return None
+    if isinstance(value, dict):
+        return value
+    if not isinstance(value, str):
+        return None
+    try:
+        parsed = json.loads(value)
+    except json.JSONDecodeError:
+        return None
+    return parsed if isinstance(parsed, dict) else None
+
+
+def _to_scholarship_response(scholarship: dict[str, Any]) -> ScholarshipResponse:
+    """Map a database row into an API response model."""
+    return ScholarshipResponse(
+        id=scholarship["id"],
+        name=scholarship["name"],
+        provider=scholarship["provider"],
+        funding_amount=scholarship.get("funding_amount"),
+        currency=scholarship.get("currency"),
+        deadline=scholarship.get("deadline"),
+        description=scholarship.get("description"),
+        eligibility_criteria=_json_field(scholarship.get("eligibility_criteria")),
+        application_requirements=_json_field(scholarship.get("application_requirements")),
+        source_url=scholarship["source_url"],
+        crawled_at=scholarship.get("crawled_at"),
+        link_confidence=scholarship.get("link_confidence"),
+        link_type=scholarship.get("link_type"),
+    )
 
 
 @router.post("/search", response_model=ScholarshipSearchResponse)
@@ -37,22 +74,7 @@ async def search_scholarships(request: ScholarshipSearchRequest):
             scholarships=scholarships,
         )
 
-    data = [
-        ScholarshipResponse(
-            id=s["id"],
-            name=s["name"],
-            provider=s["provider"],
-            funding_amount=s.get("funding_amount"),
-            currency=s.get("currency", "USD"),
-            deadline=s.get("deadline"),
-            description=s.get("description"),
-            eligibility_criteria=s.get("eligibility_criteria"),
-            application_requirements=s.get("application_requirements"),
-            source_url=s["source_url"],
-            crawled_at=s.get("crawled_at"),
-        )
-        for s in scholarships
-    ]
+    data = [_to_scholarship_response(s) for s in scholarships]
 
     return ScholarshipSearchResponse(
         success=True,
@@ -75,19 +97,7 @@ async def get_scholarship(scholarship_id: str):
     criteria_repo = EligibilityCriteriaRepository()
     criteria = await criteria_repo.get_by_scholarship_id(scholarship_id)
 
-    response_data = ScholarshipResponse(
-        id=scholarship["id"],
-        name=scholarship["name"],
-        provider=scholarship["provider"],
-        funding_amount=scholarship.get("funding_amount"),
-        currency=scholarship.get("currency", "USD"),
-        deadline=scholarship.get("deadline"),
-        description=scholarship.get("description"),
-        eligibility_criteria=scholarship.get("eligibility_criteria"),
-        application_requirements=scholarship.get("application_requirements"),
-        source_url=scholarship["source_url"],
-        crawled_at=scholarship.get("crawled_at"),
-    )
+    response_data = _to_scholarship_response(scholarship)
 
     return ScholarshipDetailResponse(
         success=True,

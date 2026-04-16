@@ -14,6 +14,7 @@ from app.models.crawl import (
     CrawlTriggerResponse,
 )
 from app.services.crawl_service import CrawlService
+from app.services.program_service import ProgramService
 from app.utils.exceptions import NotFoundError, ValidationError
 
 router = APIRouter(prefix="/api/v1/scholarships", tags=["Crawl"], dependencies=[Depends(require_service_token)])
@@ -35,9 +36,11 @@ async def trigger_crawl(request: CrawlRequest, background_tasks: BackgroundTasks
     )
 
     if request.target_url:
-        background_tasks.add_task(service.execute_on_demand_crawl, job_id, request.target_url)
+        active_programs = await ProgramService().get_all_active()
+        background_tasks.add_task(service.execute_on_demand_crawl, job_id, request.target_url, active_programs)
     elif request.target_source:
-        background_tasks.add_task(service.execute_source_crawl, job_id, request.target_source)
+        active_programs = await ProgramService().get_all_active()
+        background_tasks.add_task(service.execute_source_crawl, job_id, request.target_source, active_programs)
 
     job = await service.get_job_status(job_id)
     job_response = (

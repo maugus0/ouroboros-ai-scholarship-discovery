@@ -1,17 +1,19 @@
 """Scrapy project settings for the Scholarship Discovery Agent."""
 
+from app.config import settings
+
 BOT_NAME = "scholarship_discovery"
 SPIDER_MODULES = ["app.crawlers.scrapy.spiders"]
 NEWSPIDER_MODULE = "app.crawlers.scrapy.spiders"
 
-ROBOTSTXT_OBEY = True
+ROBOTSTXT_OBEY = settings.RESPECT_ROBOTS_TXT
 
-CONCURRENT_REQUESTS = 8
-DOWNLOAD_DELAY = 2.0
+CONCURRENT_REQUESTS = settings.SCRAPY_CONCURRENT_REQUESTS
+DOWNLOAD_DELAY = settings.SCRAPY_DOWNLOAD_DELAY
 RANDOMIZE_DOWNLOAD_DELAY = True
 
 CONCURRENT_REQUESTS_PER_DOMAIN = 4
-CONCURRENT_REQUESTS_PER_IP = 4
+# CONCURRENT_REQUESTS_PER_IP = 4
 
 COOKIES_ENABLED = False
 

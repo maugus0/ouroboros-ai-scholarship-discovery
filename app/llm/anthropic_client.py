@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 """Anthropic API client with retry logic (fallback provider)."""
 
 import json
@@ -66,3 +68,4 @@ async def call_anthropic(
         "input_tokens": usage.input_tokens if usage else None,
         "output_tokens": usage.output_tokens if usage else None,
     }
+
