@@ -22,6 +22,12 @@ class FakeScholarshipRepository:
     async def get_by_id(self, scholarship_id: str) -> dict[str, Any] | None:
         return self._store.get(scholarship_id)
 
+    async def get_by_source_url(self, source_url: str) -> dict[str, Any] | None:
+        for scholarship in self._store.values():
+            if scholarship.get("source_url") == source_url:
+                return scholarship
+        return None
+
     async def search_scholarships(
         self,
         provider=None,
