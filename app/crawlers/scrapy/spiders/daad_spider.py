@@ -316,8 +316,9 @@ class DAADSpider(scrapy.Spider):
         seed = dict(response.meta.get("scholarship_seed") or {})
         clean_text = extract_page_text(response.text)
         seed_title = seed.get("name")
-        title = seed_title if seed_title and seed_title.lower() not in self.GENERIC_TITLES else None
-        title = title or self._extract_detail_title(response) or self._derive_title_from_text(clean_text)
+        title = self._extract_detail_title(response) or self._derive_title_from_text(clean_text)
+        if not title and seed_title and seed_title.lower() not in self.GENERIC_TITLES:
+            title = seed_title
         title = title or "DAAD Scholarship"
         description = self._extract_detail_description(response) or clean_text or seed.get("description")
 
@@ -379,4 +380,3 @@ class DAADSpider(scrapy.Spider):
         ).getall()
         text = self._normalize_text(" ".join(part.strip() for part in sections if part.strip()))
         return text
-

@@ -3,16 +3,16 @@
 from __future__ import annotations
 
 import asyncio
-from datetime import date, datetime
 import re
+from datetime import date, datetime
 from typing import Any
 
 from app.core.logging import get_logger
 from app.crawlers.on_demand_crawler import crawl_scholarship_page, discover_scholarship_links
 from app.repositories.mysql_crawl_job_repo import CrawlJobRepository
 from app.repositories.mysql_eligibility_criteria_repo import EligibilityCriteriaRepository
-from app.services.linking_service import LinkingService
 from app.services.eligibility_criteria_builder import EligibilityCriteriaBuilder
+from app.services.linking_service import LinkingService
 from app.services.llm_service import LLMService
 from app.services.scholarship_service import ScholarshipService
 from app.utils.helpers import get_current_time_iso
@@ -435,7 +435,9 @@ class CrawlService:
                 }
             )
 
-        eligibility_payload = payload.get("eligibility_criteria") if isinstance(payload.get("eligibility_criteria"), dict) else {}
+        eligibility_payload = (
+            payload.get("eligibility_criteria") if isinstance(payload.get("eligibility_criteria"), dict) else {}
+        )
         eligibility_payload = dict(eligibility_payload)
         eligibility_payload["parsed_criteria"] = criteria_to_store
         await self.scholarship_service.store_crawled_scholarship(

@@ -42,9 +42,7 @@ class EligibilityFilterService:
             criterion for criterion in mandatory_criteria if criterion.get("criterion_type") == "language_test"
         ]
 
-        if language_criteria and not any(
-            self._meets_criterion(profile, criterion) for criterion in language_criteria
-        ):
+        if language_criteria and not any(self._meets_criterion(profile, criterion) for criterion in language_criteria):
             return False
 
         for criterion in mandatory_criteria:

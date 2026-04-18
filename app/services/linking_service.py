@@ -178,7 +178,11 @@ class LinkingService:
 
             candidate_tokens = normalized_candidate.split()
 
-            if len(candidate_tokens) == 1 and len(candidate_tokens[0]) <= 8 and candidate_tokens[0] == university_acronym:
+            if (
+                len(candidate_tokens) == 1
+                and len(candidate_tokens[0]) <= 8
+                and candidate_tokens[0] == university_acronym
+            ):
                 return 1.0
 
             if len(university_tokens) == 1 and len(university_tokens[0]) <= 8:

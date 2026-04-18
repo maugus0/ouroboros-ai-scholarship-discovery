@@ -119,9 +119,7 @@ def test_geographic_nationality_country_match_from_parsed_criteria():
     service = LinkingService()
     scholarship = {
         "eligibility_criteria": {
-            "parsed_criteria": [
-                {"criterion_type": "nationality", "criterion_value": "Yemen", "is_mandatory": True}
-            ]
+            "parsed_criteria": [{"criterion_type": "nationality", "criterion_value": "Yemen", "is_mandatory": True}]
         }
     }
     program = {"country": "Yemen"}

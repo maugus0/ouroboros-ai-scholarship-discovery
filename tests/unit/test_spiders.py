@@ -127,7 +127,7 @@ def test_chevening_spider_extracts_fellowship_metadata():
           <body>
             <main>
               <h1>Chevening Science Fellowship</h1>
-              <p>Funding available: ¡ê18,000 per year</p>
+              <p>Funding available: GBP 18,000 per year</p>
               <p>Deadline: November 5 2026</p>
               <h2>Eligibility</h2>
               <p>Applicants must be citizens of eligible countries and hold an undergraduate degree.</p>
@@ -157,8 +157,12 @@ def test_daad_spider_extracts_detail_requests_from_js_feed():
     results = list(spider.parse(response))
     urls = {request.url for request in results}
 
-    assert "https://www2.daad.de/deutschland/stipendium/datenbank/en/21148-scholarship-database/?detail=50015492" in urls
-    assert "https://www2.daad.de/deutschland/stipendium/datenbank/en/21148-scholarship-database/?detail=50015493" in urls
+    assert (
+        "https://www2.daad.de/deutschland/stipendium/datenbank/en/21148-scholarship-database/?detail=50015492" in urls
+    )
+    assert (
+        "https://www2.daad.de/deutschland/stipendium/datenbank/en/21148-scholarship-database/?detail=50015493" in urls
+    )
 
 
 def test_daad_spider_uses_static_js_metadata_without_detail_request():

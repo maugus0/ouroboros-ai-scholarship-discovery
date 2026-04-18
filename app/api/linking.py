@@ -5,11 +5,11 @@
 
 from fastapi import APIRouter, Depends, Query
 
+from app.api.scholarships import _to_scholarship_response
+from app.config import settings
 from app.middleware.service_auth import require_service_token
 from app.models.linking import LinkRequest
 from app.models.scholarship import ScholarshipSearchResponse
-from app.api.scholarships import _to_scholarship_response
-from app.config import settings
 from app.repositories.mysql_link_repo import LinkRepository
 from app.repositories.mysql_scholarship_repo import ScholarshipRepository
 from app.services.linking_service import LinkingService

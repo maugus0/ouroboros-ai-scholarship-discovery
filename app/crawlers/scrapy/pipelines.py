@@ -1,9 +1,11 @@
 """Scrapy pipelines for data validation and database storage."""
 
-from scrapy.exceptions import DropItem
 import asyncio
-from app.services.crawl_service import CrawlService
+
+from scrapy.exceptions import DropItem
+
 from app.core.logging import get_logger
+from app.services.crawl_service import CrawlService
 
 logger = get_logger(__name__)
 
@@ -58,6 +60,7 @@ class StoreScholarshipPipeline:
 
         async def process_all():
             semaphore = asyncio.Semaphore(5)
+
             async def process(item):
                 async with semaphore:
                     try:

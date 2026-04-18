@@ -68,4 +68,3 @@ async def call_anthropic(
         "input_tokens": usage.input_tokens if usage else None,
         "output_tokens": usage.output_tokens if usage else None,
     }
-
