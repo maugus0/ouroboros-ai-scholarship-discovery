@@ -1,6 +1,6 @@
-from __future__ import annotations
-
 """Anthropic API client with retry logic (fallback provider)."""
+
+from __future__ import annotations
 
 import json
 

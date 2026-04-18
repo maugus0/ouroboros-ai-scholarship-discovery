@@ -145,7 +145,7 @@ class EligibilityCriteriaBuilder:
     def _looks_like_country_or_nationality(cls, value: str) -> bool:
         """Reject common false positives from long free-text requirements."""
         value = " ".join(value.split()).strip(" .,;:")
-        if not (2 <= len(value) <= 50):
+        if len(value) < 2 or len(value) > 50:
             return False
         words = value.split()
         if len(words) > 4:

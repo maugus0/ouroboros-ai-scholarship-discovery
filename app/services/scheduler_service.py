@@ -1,6 +1,6 @@
-from __future__ import annotations
-
 """APScheduler-based periodic crawl scheduling."""
+
+from __future__ import annotations
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
