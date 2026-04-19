@@ -540,26 +540,24 @@ class CrawlService:
     ) -> None:
         """Execute a crawl over a listing page and track crawl job metrics."""
         await self.crawl_job_repo.update_status(job_id, "running")
-        scholarships_crawled = 0
-        scholarships_updated = 0
-
         try:
             links = await discover_scholarship_links(source_url)
             semaphore = asyncio.Semaphore(5)
 
-            async def process_link(link: str) -> None:
-                nonlocal scholarships_crawled, scholarships_updated
+            async def process_link(link: str) -> tuple[int, int]:
                 try:
                     async with semaphore:
                         scraped_data = await crawl_scholarship_page(link)
                         if scraped_data:
                             await self._process_scraped_item(scraped_data, active_programs or [])
-                            scholarships_crawled += 1
-                            scholarships_updated += 1
+                            return 1, 1
                 except Exception as link_exc:  # pylint: disable=broad-exception-caught
                     logger.warning("scholarship_page_crawl_failed", url=link, error=str(link_exc))
+                return 0, 0
 
-            await asyncio.gather(*(process_link(link) for link in links))
+            crawl_results = await asyncio.gather(*(process_link(link) for link in links))
+            scholarships_crawled = sum(result[0] for result in crawl_results)
+            scholarships_updated = sum(result[1] for result in crawl_results)
 
             await self.crawl_job_repo.update_status(
                 job_id,

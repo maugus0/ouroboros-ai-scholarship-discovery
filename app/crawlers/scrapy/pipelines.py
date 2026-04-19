@@ -3,6 +3,7 @@
 import asyncio
 
 from scrapy.exceptions import DropItem
+from scrapy.utils.defer import deferred_from_coro
 
 from app.core.logging import get_logger
 from app.services.crawl_service import CrawlService
@@ -52,12 +53,6 @@ class StoreScholarshipPipeline:
 
         active_programs = spider.settings.get("ACTIVE_PROGRAMS", [])
 
-        try:
-            loop = asyncio.get_event_loop()
-        except RuntimeError:
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-
         async def process_all():
             semaphore = asyncio.Semaphore(5)
 
@@ -66,11 +61,13 @@ class StoreScholarshipPipeline:
                     try:
                         await self.crawl_service._process_scraped_item(item, active_programs)
                     except Exception as e:
-                        logger.error(f"Pipeline processing failed: {e}")
+                        logger.error(
+                            "pipeline_processing_failed",
+                            error=str(e),
+                            source_url=item.get("source_url"),
+                            spider=spider.name,
+                        )
 
             await asyncio.gather(*(process(item) for item in self.items))
 
-        if loop.is_running():
-            loop.create_task(process_all())
-        else:
-            loop.run_until_complete(process_all())
+        return deferred_from_coro(process_all())
