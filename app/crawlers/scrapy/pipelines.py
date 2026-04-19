@@ -49,7 +49,7 @@ class StoreScholarshipPipeline:
     def close_spider(self, spider):
         logger.info("spider_closed_processing", spider=spider.name, items_queued=len(self.items))
         if not self.items:
-            return
+            return None
 
         active_programs = spider.settings.get("ACTIVE_PROGRAMS", [])
 
