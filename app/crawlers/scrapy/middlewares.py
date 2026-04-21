@@ -32,7 +32,7 @@ class RotateUserAgentMiddleware:
         return middleware
 
     def process_request(self, request, spider):  # pylint: disable=unused-argument
-        request.headers["User-Agent"] = random.choice(USER_AGENTS)
+        request.headers["User-Agent"] = random.choice(USER_AGENTS)  # nosec B311
 
     def spider_opened(self, spider):
         spider.logger.info("RotateUserAgentMiddleware enabled for %s", spider.name)

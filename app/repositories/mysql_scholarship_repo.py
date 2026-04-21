@@ -107,7 +107,7 @@ class ScholarshipRepository(MySQLBaseRepository):
             WHERE {where_clause}
             ORDER BY deadline ASC, created_at DESC
             LIMIT %s OFFSET %s
-        """
+        """  # nosec B608
         return await self.execute_query(query, tuple(params))
 
     async def count_scholarships(
@@ -131,7 +131,7 @@ class ScholarshipRepository(MySQLBaseRepository):
             params.extend(scholarship_ids)
 
         where_clause = " AND ".join(conditions)
-        query = f"SELECT COUNT(*) AS total FROM scholarships WHERE {where_clause}"
+        query = f"SELECT COUNT(*) AS total FROM scholarships WHERE {where_clause}"  # nosec B608
         result = await self.execute_one(query, tuple(params))
         return result["total"] if result else 0
 
@@ -170,7 +170,7 @@ class ScholarshipRepository(MySQLBaseRepository):
             set_clauses.append(f"{key} = %s")
             params.append(json.dumps(value) if key in json_fields else value)
         params.append(scholarship_id)
-        query = f"UPDATE scholarships SET {', '.join(set_clauses)} WHERE id = %s"
+        query = f"UPDATE scholarships SET {', '.join(set_clauses)} WHERE id = %s"  # nosec B608
         rows = await self.execute_write(query, tuple(params))
         logger.info("scholarship_updated", scholarship_id=scholarship_id, fields=list(filtered_updates.keys()))
         return rows

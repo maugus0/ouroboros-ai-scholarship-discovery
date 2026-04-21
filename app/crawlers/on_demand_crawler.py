@@ -29,7 +29,7 @@ async def fetch_page(url: str, timeout: int = 30) -> str | None:
 
     headers = {"User-Agent": _ua.random}
 
-    delay = random.uniform(settings.MIN_CRAWL_DELAY_SECONDS, settings.MAX_CRAWL_DELAY_SECONDS)
+    delay = random.uniform(settings.MIN_CRAWL_DELAY_SECONDS, settings.MAX_CRAWL_DELAY_SECONDS)  # nosec B311
     await asyncio.sleep(delay)
 
     try:

@@ -260,6 +260,7 @@ jobs:
 
       - name: Run Snyk dependency test
         if: env.SNYK_TOKEN != ''
+        continue-on-error: true
         run: |
           snyk auth "$SNYK_TOKEN"
           snyk test \

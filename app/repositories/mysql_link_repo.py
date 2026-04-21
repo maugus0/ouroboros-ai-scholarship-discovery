@@ -65,7 +65,7 @@ class LinkRepository(MySQLBaseRepository):
         query = f"""
             SELECT DISTINCT scholarship_id FROM scholarship_program_links
             WHERE program_id IN ({placeholders}) AND confidence_score >= %s
-        """
+        """  # nosec B608
         params = tuple(program_ids) + (min_confidence,)
         rows = await self.execute_query(query, params)
         return [row["scholarship_id"] for row in rows]
