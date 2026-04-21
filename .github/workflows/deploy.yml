@@ -1,5 +1,7 @@
 # OuroborosAI Scholarship Discovery — CI/CD (GitHub Actions)
-# Tracker: ORB-14 (repository setup; pipeline parity with other Ouroboros agents).
+#
+# Stages: format + lint + unit-tests (parallel) → Type Checking (mypy), Tests with Coverage,
+#         Security Scan (Bandit) + Security Scan (Snyk OSS) → Docker GHCR (push to main) → Trivy (main).
 #
 # Action major tags (verify on GitHub releases):
 #   actions/checkout@v6 — https://github.com/actions/checkout/releases
@@ -10,23 +12,36 @@
 #
 # Older action bundles shipped with Node 20; newer majors run on Node 24.
 # See: https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/
+#
+# Action versions use moving major tags (e.g. @v6). For stronger supply-chain pinning,
+# replace with commit-SHA references after verifying the tag on GitHub; majors are
+# rechecked when upgrading the workflow.
 
 name: OuroborosAI Scholarship Discovery CI/CD Pipeline
 
 on:
   pull_request:
-    branches:
-      - main
-      - develop
+    branches: [main, develop]
+    types: [opened, synchronize, reopened]
+  push:
+    branches: [main]
+
+# Cancel superseded runs on the same ref (saves runner minutes on active PRs).
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 permissions:
   contents: read
 
 env:
+  PYTHON_VERSION: "3.11"
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 jobs:
-  # -- Code Formatting -------------------------------------------------
+  # ---------------------------------------------------------------------------
+  # Stage 1: Format, lint, and unit tests (parallel)
+  # ---------------------------------------------------------------------------
   format:
     name: Code Formatting
     runs-on: ubuntu-latest
@@ -34,23 +49,24 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v6
 
-      - name: Set up Python 3.11
+      - name: Set up Python
         uses: actions/setup-python@v6
         with:
-          python-version: "3.11"
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+          cache-dependency-path: requirements-dev.txt
 
       - name: Install dev dependencies
         run: |
           pip install --upgrade pip
           pip install -r requirements-dev.txt
 
-      - name: Check formatting (Black)
+      - name: Check formatting
         run: black --check --diff app/ tests/
 
-      - name: Check import sorting (isort)
+      - name: Check import sorting
         run: isort --check-only --diff app/ tests/
 
-  # -- Linting ---------------------------------------------------------
   lint:
     name: Lint & Code Quality
     runs-on: ubuntu-latest
@@ -58,10 +74,12 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v6
 
-      - name: Set up Python 3.11
+      - name: Set up Python
         uses: actions/setup-python@v6
         with:
-          python-version: "3.11"
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+          cache-dependency-path: requirements-dev.txt
 
       - name: Install dev dependencies
         run: |
@@ -72,9 +90,8 @@ jobs:
         run: flake8 app/ tests/ --max-line-length=120 --extend-ignore=E203,W503,E501
 
       - name: Run pylint
-        run: pylint app/ tests/
+        run: pylint app/ tests/ --max-line-length=120 --disable=C0111,R0903
 
-  # -- Unit Tests ------------------------------------------------------
   unit-tests:
     name: Unit Tests
     runs-on: ubuntu-latest
@@ -82,12 +99,14 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v6
 
-      - name: Set up Python 3.11
+      - name: Set up Python
         uses: actions/setup-python@v6
         with:
-          python-version: "3.11"
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+          cache-dependency-path: requirements-dev.txt
 
-      - name: Install dependencies
+      - name: Install dev dependencies
         run: |
           pip install --upgrade pip
           pip install -r requirements-dev.txt
@@ -111,21 +130,26 @@ jobs:
           path: junit-report.xml
           retention-days: 7
 
-  # -- Type Checking ---------------------------------------------------
+  # ---------------------------------------------------------------------------
+  # Stage 2: Type check, coverage, static + dependency security (parallel)
+  # Requires Stage 1 (format, lint, unit-tests).
+  # ---------------------------------------------------------------------------
   type-check:
     name: Type Checking (mypy)
-    needs: [format, lint]
     runs-on: ubuntu-latest
+    needs: [format, lint, unit-tests]
     steps:
       - name: Checkout code
         uses: actions/checkout@v6
 
-      - name: Set up Python 3.11
+      - name: Set up Python
         uses: actions/setup-python@v6
         with:
-          python-version: "3.11"
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+          cache-dependency-path: requirements-dev.txt
 
-      - name: Install dependencies
+      - name: Install dev dependencies
         run: |
           pip install --upgrade pip
           pip install -r requirements-dev.txt
@@ -133,26 +157,27 @@ jobs:
       - name: Run mypy
         run: mypy app/ --ignore-missing-imports --no-strict-optional
 
-  # -- Full test suite + Coverage --------------------------------------
   integration-tests:
     name: Tests with Coverage
-    needs: [format, lint]
     runs-on: ubuntu-latest
+    needs: [format, lint, unit-tests]
     steps:
       - name: Checkout code
         uses: actions/checkout@v6
 
-      - name: Set up Python 3.11
+      - name: Set up Python
         uses: actions/setup-python@v6
         with:
-          python-version: "3.11"
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+          cache-dependency-path: requirements-dev.txt
 
-      - name: Install dependencies
+      - name: Install dev dependencies
         run: |
           pip install --upgrade pip
           pip install -r requirements-dev.txt
 
-      - name: Run tests with coverage
+      - name: Run integration tests with coverage
         env:
           ALLOW_DB_FAILURE: "true"
           USE_MOCK_DATA: "true"
@@ -161,9 +186,9 @@ jobs:
           MYSQL_DATABASE: "test_db"
           MYSQL_USER: "test_user"
           MYSQL_PASSWORD: "test_pass"
-        run: pytest tests/ --cov=app --cov-report=html --cov-report=xml -v
+        run: pytest tests/integration/ --cov=app --cov-report=html --cov-report=xml -v
 
-      - name: Upload coverage report
+      - name: Upload coverage HTML report
         if: always()
         uses: actions/upload-artifact@v6
         with:
@@ -171,43 +196,104 @@ jobs:
           path: htmlcov/
           retention-days: 7
 
-  # -- Security Scan ---------------------------------------------------
-  security-audit:
-    name: Security Scan
-    needs: [format, lint]
+      # Cobertura-style XML for external dashboards.
+      - name: Upload coverage XML report
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: coverage-xml
+          path: coverage.xml
+          retention-days: 7
+
+  security-static:
+    name: Security Scan (Bandit)
     runs-on: ubuntu-latest
+    needs: [format, lint, unit-tests]
     steps:
       - name: Checkout code
         uses: actions/checkout@v6
 
-      - name: Set up Python 3.11
+      - name: Set up Python
         uses: actions/setup-python@v6
         with:
-          python-version: "3.11"
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+          cache-dependency-path: requirements-dev.txt
 
-      - name: Install dependencies
+      - name: Install dev dependencies
         run: |
           pip install --upgrade pip
           pip install -r requirements-dev.txt
 
       - name: Run Bandit
-        run: |
-          bandit -r app/ -f json -o bandit-report.json || true
-          bandit -r app/ || true
+        run: bandit -r app/ -f json -o bandit-report.json -c bandit.yaml
 
-      - name: Upload security reports
-        if: always()
+      - name: Upload Bandit report
+        if: always() && hashFiles('bandit-report.json') != ''
         uses: actions/upload-artifact@v6
         with:
-          name: security-reports
+          name: security-reports-bandit
           path: bandit-report.json
           retention-days: 7
 
-  # -- Docker Build ----------------------------------------------------
-  build-docker:
-    name: Build Docker Image
-    needs: [unit-tests, type-check, integration-tests, security-audit]
+  security-scan:
+    name: Security Scan (Snyk OSS)
     runs-on: ubuntu-latest
+    needs: [format, lint, unit-tests]
+    env:
+      SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+    permissions:
+      contents: read
+      security-events: write
+      actions: read
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Skip Snyk (no token)
+        if: env.SNYK_TOKEN == ''
+        run: echo "SNYK_TOKEN not set; skipping Snyk OSS scan. Add repo secret to enforce dependency checks."
+
+      - name: Setup Snyk CLI
+        if: env.SNYK_TOKEN != ''
+        uses: snyk/actions/setup@v1.0.0
+
+      - name: Run Snyk dependency test
+        if: env.SNYK_TOKEN != ''
+        run: |
+          snyk auth "$SNYK_TOKEN"
+          snyk test \
+            --file=requirements.txt \
+            --severity-threshold=high \
+            --sarif-file-output=snyk.sarif
+
+      - name: Upload Snyk SARIF to Code Scanning
+        if: vars.ENABLE_CODE_SCANNING_SARIF == 'true' && env.SNYK_TOKEN != '' && always() && hashFiles('snyk.sarif') != '' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
+        uses: github/codeql-action/upload-sarif@v4
+        with:
+          sarif_file: snyk.sarif
+
+      - name: Upload Snyk SARIF artifact
+        if: env.SNYK_TOKEN != '' && always() && hashFiles('snyk.sarif') != ''
+        uses: actions/upload-artifact@v6
+        with:
+          name: snyk-sarif
+          path: snyk.sarif
+
+  # ---------------------------------------------------------------------------
+  # Stage 3: Docker build → GHCR (push only on merge to main, not on PR)
+  # ---------------------------------------------------------------------------
+  docker-build:
+    name: Build & Push Docker Image
+    runs-on: ubuntu-latest
+    needs:
+      - type-check
+      - integration-tests
+      - security-static
+      - security-scan
+    permissions:
+      contents: read
+      packages: write
     steps:
       - name: Checkout code
         uses: actions/checkout@v6
@@ -215,32 +301,130 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v4
 
-      - name: Build Docker image
+      - name: Log in to GitHub Container Registry
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract Docker image metadata
+        id: meta
+        uses: docker/metadata-action@v6
+        with:
+          images: ghcr.io/${{ github.repository }}
+          tags: |
+            type=ref,event=branch
+            type=ref,event=pr
+            type=sha
+            type=raw,value=${{ github.sha }}
+            type=raw,value=latest,enable={{is_default_branch}}
+
+      - name: Build and push Docker image
         uses: docker/build-push-action@v7
         with:
           context: .
-          push: false
-          tags: scholarship-discovery-agent:latest
+          push: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+          load: ${{ github.event_name == 'pull_request' }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-  # -- Summary ---------------------------------------------------------
-  summary:
-    name: CI/CD Summary
-    needs: [unit-tests, format, lint, type-check, integration-tests, security-audit, build-docker]
+  # ---------------------------------------------------------------------------
+  # Stage 4: Trivy (after image push to GHCR on main)
+  # ---------------------------------------------------------------------------
+  trivy-scan:
+    name: Trivy Scan
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
-    if: always()
+    needs: [docker-build]
+    permissions:
+      contents: read
+      packages: read
+      security-events: write
+      actions: read
     steps:
-      - name: Generate Summary
+      - name: Log in to GitHub Container Registry (pull)
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Run Trivy SARIF scan
+        uses: aquasecurity/trivy-action@0.35.0
+        with:
+          image-ref: ghcr.io/${{ github.repository }}:${{ github.sha }}
+          format: sarif
+          output: trivy.sarif
+
+      - name: Upload Trivy SARIF to Code Scanning
+        if: vars.ENABLE_CODE_SCANNING_SARIF == 'true' && always() && hashFiles('trivy.sarif') != ''
+        uses: github/codeql-action/upload-sarif@v4
+        with:
+          sarif_file: trivy.sarif
+
+      - name: Run Trivy JSON scan
+        uses: aquasecurity/trivy-action@0.35.0
+        with:
+          image-ref: ghcr.io/${{ github.repository }}:${{ github.sha }}
+          format: json
+          output: trivy-results.json
+
+      - name: Upload Trivy report artifact
+        if: always() && hashFiles('trivy-results.json') != ''
+        uses: actions/upload-artifact@v6
+        with:
+          name: trivy-report
+          path: trivy-results.json
+
+  # ---------------------------------------------------------------------------
+  # Stage 5: Summary (if: always so PRs get a bundle when Trivy is skipped)
+  # ---------------------------------------------------------------------------
+  reports-summary:
+    name: CI Summary & Report Bundle
+    runs-on: ubuntu-latest
+    needs:
+      - format
+      - lint
+      - unit-tests
+      - type-check
+      - integration-tests
+      - security-static
+      - security-scan
+      - docker-build
+      - trivy-scan
+    if: always()
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - name: Create CI summary
         run: |
-          echo "# OuroborosAI Scholarship Discovery — CI/CD Summary" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "| Job | Status |" >> $GITHUB_STEP_SUMMARY
-          echo "|-----|--------|" >> $GITHUB_STEP_SUMMARY
-          echo "| Format | ${{ needs.format.result == 'success' && 'Passed' || 'Failed' }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| Lint | ${{ needs.lint.result == 'success' && 'Passed' || 'Failed' }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| Unit Tests | ${{ needs.unit-tests.result == 'success' && 'Passed' || 'Failed' }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| Type Check (mypy) | ${{ needs.type-check.result == 'success' && 'Passed' || 'Failed' }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| Tests + Coverage | ${{ needs.integration-tests.result == 'success' && 'Passed' || 'Failed' }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| Security Audit | ${{ needs.security-audit.result == 'success' && 'Passed' || 'Failed' }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| Docker Build | ${{ needs.build-docker.result == 'success' && 'Passed' || 'Failed' }} |" >> $GITHUB_STEP_SUMMARY
+          {
+            echo "# OuroborosAI Scholarship Discovery — CI Reports";
+            echo "- Commit: $GITHUB_SHA";
+            echo "- Ref: $GITHUB_REF";
+            echo "- Container image: ghcr.io/${{ github.repository }}";
+            echo "";
+            echo "## Job results";
+            echo "- Code Formatting: ${{ needs.format.result }}";
+            echo "- Lint & Code Quality: ${{ needs.lint.result }}";
+            echo "- Unit Tests: ${{ needs.unit-tests.result }}";
+            echo "- Type Checking (mypy): ${{ needs.type-check.result }}";
+            echo "- Tests with Coverage: ${{ needs.integration-tests.result }}";
+            echo "- Security Scan (Bandit): ${{ needs.security-static.result }}";
+            echo "- Security Scan (Snyk OSS): ${{ needs.security-scan.result }}";
+            echo "- Docker Build/Push: ${{ needs.docker-build.result }}";
+            echo "- Trivy: ${{ needs.trivy-scan.result }}";
+            echo "";
+            echo "_Trivy runs on push to main only; on PRs the Trivy job is skipped._";
+          } > summary.md
+
+      - name: Upload consolidated report bundle
+        uses: actions/upload-artifact@v6
+        with:
+          name: ci-reports
+          path: summary.md
