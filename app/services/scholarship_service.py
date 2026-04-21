@@ -63,12 +63,14 @@ class ScholarshipService:
 
     async def store_crawled_scholarship(self, data: dict[str, Any]) -> str:
         """Store or update a crawled scholarship."""
-        existing = await self.scholarship_repo.search_scholarships(limit=100)
-        for s in existing:
-            if s.get("source_url") == data.get("source_url"):
-                await self.scholarship_repo.update_scholarship(s["id"], data)
-                logger.info("scholarship_updated_from_crawl", scholarship_id=s["id"])
-                return s["id"]
+        existing = None
+        if data.get("source_url"):
+            existing = await self.scholarship_repo.get_by_source_url(data["source_url"])
+
+        if existing:
+            await self.scholarship_repo.update_scholarship(existing["id"], data)
+            logger.info("scholarship_updated_from_crawl", scholarship_id=existing["id"])
+            return existing["id"]
 
         scholarship_id = await self.scholarship_repo.create_scholarship(data)
         logger.info("scholarship_created_from_crawl", scholarship_id=scholarship_id)

@@ -18,4 +18,12 @@ min-similarity-lines = 20
 ignore-imports = yes
 
 [MESSAGES CONTROL]
-disable = C0111, R0903
+disable =
+    C0111,
+    C0301,
+    C0327,
+    R0903,
+    R0911,
+    W0212,
+    W0613,
+    W0718

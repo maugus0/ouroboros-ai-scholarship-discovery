@@ -65,7 +65,7 @@ class LinkRepository(MySQLBaseRepository):
         query = f"""
             SELECT DISTINCT scholarship_id FROM scholarship_program_links
             WHERE program_id IN ({placeholders}) AND confidence_score >= %s
-        """
+        """  # nosec B608
         params = tuple(program_ids) + (min_confidence,)
         rows = await self.execute_query(query, params)
         return [row["scholarship_id"] for row in rows]
@@ -74,14 +74,37 @@ class LinkRepository(MySQLBaseRepository):
         self,
         program_id: str,
         min_confidence: float = 0.0,
+        limit: int | None = None,
+        offset: int = 0,
     ) -> list[dict[str, Any]]:
-        """Return all links for a specific program, filtered by minimum confidence."""
+        """Return links for a specific program, filtered by minimum confidence.
+
+        When ``limit`` is provided, pagination is applied at the DB level.
+        """
+        if limit is not None:
+            query = """
+                SELECT * FROM scholarship_program_links
+                WHERE program_id = %s AND confidence_score >= %s
+                ORDER BY confidence_score DESC
+                LIMIT %s OFFSET %s
+            """
+            return await self.execute_query(query, (program_id, min_confidence, limit, offset))
+
         query = """
             SELECT * FROM scholarship_program_links
             WHERE program_id = %s AND confidence_score >= %s
             ORDER BY confidence_score DESC
         """
         return await self.execute_query(query, (program_id, min_confidence))
+
+    async def count_by_program_id(self, program_id: str, min_confidence: float = 0.0) -> int:
+        """Count links for a specific program above minimum confidence."""
+        query = """
+            SELECT COUNT(*) AS total FROM scholarship_program_links
+            WHERE program_id = %s AND confidence_score >= %s
+        """
+        result = await self.execute_one(query, (program_id, min_confidence))
+        return result["total"] if result else 0
 
     async def get_by_scholarship_id(self, scholarship_id: str) -> list[dict[str, Any]]:
         """Return all links for a specific scholarship."""

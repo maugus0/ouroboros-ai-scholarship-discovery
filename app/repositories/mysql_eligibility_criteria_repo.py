@@ -12,6 +12,10 @@ logger = get_logger(__name__)
 class EligibilityCriteriaRepository(MySQLBaseRepository):
     """CRUD operations on the ``eligibility_criteria`` table."""
 
+    async def create(self, data: dict[str, Any]) -> str:
+        """Backward-compatible alias used by older service code."""
+        return await self.create_criterion(data)
+
     async def create_criterion(self, data: dict[str, Any]) -> str:
         """Insert a new eligibility criterion and return its UUID."""
         criterion_id = generate_uuid()

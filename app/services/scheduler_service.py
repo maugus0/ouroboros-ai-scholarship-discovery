@@ -1,13 +1,13 @@
-"""APScheduler-based periodic crawl scheduling.
+"""APScheduler-based periodic crawl scheduling."""
 
-Registers the weekly batch job using ``settings.BATCH_CRAWL_CRON`` (same pattern as Program Discovery).
-"""
+from __future__ import annotations
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
 from app.config import settings
 from app.core.logging import get_logger
 from app.services.crawl_service import CrawlService
+from app.services.program_service import ProgramService
 
 logger = get_logger(__name__)
 
@@ -57,9 +57,28 @@ async def stop_scheduler() -> None:
 
 
 async def _batch_crawl_trigger() -> None:
-    """Triggered by APScheduler to start a batch crawl of stale scholarships."""
+    """Run scheduled incremental crawls for each configured scholarship source."""
     logger.info("batch_crawl_triggered")
 
+    source_urls = settings.get_batch_crawl_sources()
+    if not source_urls:
+        logger.warning("batch_crawl_skipped_no_sources_configured")
+        return
+
     crawl_service = CrawlService()
-    job_id = await crawl_service.create_job({"job_type": "batch"})
-    logger.info("batch_crawl_job_created", job_id=job_id)
+    program_service = ProgramService()
+    active_programs = await program_service.get_all_active()
+
+    for source_url in source_urls:
+        job_id = await crawl_service.create_job(
+            {
+                "job_type": "batch",
+                "target_source": source_url,
+            }
+        )
+
+        try:
+            await crawl_service.execute_source_crawl(job_id, source_url, active_programs)
+            logger.info("batch_crawl_job_completed", job_id=job_id, source_url=source_url)
+        except Exception as exc:  # pylint: disable=broad-exception-caught
+            logger.error("batch_crawl_job_failed", job_id=job_id, source_url=source_url, error=str(exc))

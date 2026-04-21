@@ -4,6 +4,7 @@ Calculates confidence scores across university, field, degree, and geographic di
 Geographic scoring uses :func:`app.utils.region_mapping.entity_matches_region`.
 """
 
+import re
 from typing import Any, Optional
 
 from app.config import settings
@@ -18,9 +19,72 @@ logger = get_logger(__name__)
 class LinkingService:
     """Calculate and store 4-dimension scholarship-program links."""
 
+    ACRONYM_STOPWORDS = {"and", "for", "of", "the", "to", "in"}
+
     def __init__(self):
         self.link_repo = LinkRepository()
         self.scholarship_repo = ScholarshipRepository()
+
+    @staticmethod
+    def _normalize_text(value: Any) -> str:
+        """Lowercase and remove punctuation for lenient text matching."""
+        return re.sub(r"[^a-z0-9]+", " ", str(value or "").lower()).strip()
+
+    @staticmethod
+    def _split_values(value: Any) -> list[str]:
+        """Normalize comma/list/dict values into a flat list of strings."""
+        if value in (None, "", [], {}):
+            return []
+        if isinstance(value, list):
+            values: list[str] = []
+            for item in value:
+                values.extend(LinkingService._split_values(item))
+            return values
+        if isinstance(value, dict):
+            return LinkingService._split_values(value.get("criterion_value") or value.get("value"))
+        return [part.strip() for part in str(value).split(",") if part.strip()]
+
+    @staticmethod
+    def _eligibility_payload(scholarship: dict[str, Any]) -> dict[str, Any]:
+        """Return eligibility JSON as a dict when available."""
+        eligibility = scholarship.get("eligibility_criteria") or {}
+        if isinstance(eligibility, dict):
+            return eligibility
+        return {}
+
+    @staticmethod
+    def _criterion_values(scholarship: dict[str, Any], criterion_type: str) -> list[str]:
+        """Extract values from parsed_criteria first, then legacy flat JSON keys."""
+        eligibility = LinkingService._eligibility_payload(scholarship)
+        values: list[str] = []
+
+        for criterion in eligibility.get("parsed_criteria") or []:
+            if not isinstance(criterion, dict):
+                continue
+            if criterion.get("criterion_type") == criterion_type or criterion.get("type") == criterion_type:
+                values.extend(LinkingService._split_values(criterion.get("criterion_value") or criterion.get("value")))
+
+        if not values:
+            values.extend(LinkingService._split_values(eligibility.get(criterion_type)))
+
+        return LinkingService._unique_strings(values)
+
+    @staticmethod
+    def _unique_strings(values: list[str]) -> list[str]:
+        """Dedupe values case-insensitively while preserving original spelling."""
+        seen = set()
+        result = []
+        for value in values:
+            normalized = LinkingService._normalize_text(value)
+            if normalized and normalized not in seen:
+                seen.add(normalized)
+                result.append(value)
+        return result
+
+    @classmethod
+    def _acronym(cls, tokens: list[str]) -> str:
+        """Build an acronym while ignoring common institution-name stopwords."""
+        return "".join(token[0] for token in tokens if token and token not in cls.ACRONYM_STOPWORDS)
 
     async def calculate_and_store_link(
         self,
@@ -39,12 +103,11 @@ class LinkingService:
         degree_score = self._calc_degree_match(scholarship, program_metadata)
         geographic_score = self._calc_geographic_match(scholarship, program_metadata)
 
-        weights = settings.get_linking_weights()
-        confidence = (
-            weights["university"] / 100.0 * university_score
-            + weights["field"] / 100.0 * field_score
-            + weights["degree"] / 100.0 * degree_score
-            + weights["geographic"] / 100.0 * geographic_score
+        confidence = self._calculate_composite_confidence(
+            university_score=university_score,
+            field_score=field_score,
+            degree_score=degree_score,
+            geographic_score=geographic_score,
         )
 
         if confidence < settings.MIN_LINK_CONFIDENCE_SCORE:
@@ -84,61 +147,92 @@ class LinkingService:
 
     @staticmethod
     def _calc_university_match(scholarship: dict[str, Any], program_metadata: dict[str, Any]) -> float:
-        """Direct university match (50% weight). Returns 1.0 if same university, 0.0 otherwise."""
-        provider = scholarship.get("provider", "").lower()
-        university = program_metadata.get("university_name", "").lower()
+        """Direct university match with exact, substring, and acronym-aware fallbacks."""
+        university = program_metadata.get("university_name", "")
+        provider = scholarship.get("provider", "")
+        candidates = [
+            provider,
+            scholarship.get("name", ""),
+            scholarship.get("description", ""),
+        ]
 
-        if not provider or not university:
+        if not university:
             return 0.0
 
-        if provider == university:
-            return 1.0
+        normalized_university = LinkingService._normalize_text(university)
+        university_tokens = normalized_university.split()
+        university_acronym = LinkingService._acronym(university_tokens)
 
-        if provider in university or university in provider:
-            return 1.0
+        best_score = 0.0
+        for candidate in candidates:
+            normalized_candidate = LinkingService._normalize_text(candidate)
+            if not normalized_candidate:
+                continue
 
-        return 0.0
+            if normalized_candidate == normalized_university:
+                return 1.0
+
+            if normalized_candidate in normalized_university or normalized_university in normalized_candidate:
+                best_score = max(best_score, 1.0 if candidate == provider else 0.85)
+                continue
+
+            candidate_tokens = normalized_candidate.split()
+
+            if (
+                len(candidate_tokens) == 1
+                and len(candidate_tokens[0]) <= 8
+                and candidate_tokens[0] == university_acronym
+            ):
+                return 1.0
+
+            if len(university_tokens) == 1 and len(university_tokens[0]) <= 8:
+                candidate_acronym = LinkingService._acronym(candidate_tokens)
+                if university_tokens[0] == candidate_acronym:
+                    return 1.0
+
+            overlap = set(candidate_tokens) & set(university_tokens)
+            if len(overlap) >= 2:
+                best_score = max(best_score, 0.9 if candidate == provider else 0.75)
+
+        return best_score
 
     @staticmethod
     def _calc_field_match(scholarship: dict[str, Any], program_metadata: dict[str, Any]) -> float:
         """Field-of-study overlap (30% weight). Returns 0.0-1.0 based on keyword overlap."""
-        eligibility = scholarship.get("eligibility_criteria") or {}
-        if isinstance(eligibility, str):
-            return 0.5
-
-        scholarship_fields = eligibility.get("field_of_study", [])
+        scholarship_fields = LinkingService._criterion_values(scholarship, "field_of_study")
 
         if not scholarship_fields:
             return 1.0
 
         program_field = program_metadata.get("field", "")
+        normalized_program = LinkingService._normalize_text(program_field)
+        if not normalized_program:
+            return 0.5
 
-        if isinstance(scholarship_fields, list):
-            if program_field in scholarship_fields:
+        best_score = 0.0
+        program_keywords = set(normalized_program.split())
+        for field in scholarship_fields:
+            normalized_field = LinkingService._normalize_text(field)
+            if not normalized_field:
+                continue
+            if normalized_field == normalized_program:
                 return 1.0
+            if normalized_field in normalized_program or normalized_program in normalized_field:
+                best_score = max(best_score, 0.9)
+                continue
 
-            scholarship_keywords = set(" ".join(scholarship_fields).lower().split())
-        else:
-            scholarship_keywords = set(str(scholarship_fields).lower().split())
+            scholarship_keywords = set(normalized_field.split())
+            overlap = scholarship_keywords & program_keywords
+            union = scholarship_keywords | program_keywords
+            if union:
+                best_score = max(best_score, len(overlap) / len(union))
 
-        program_keywords = set(program_field.lower().split())
-
-        overlap = scholarship_keywords & program_keywords
-        union = scholarship_keywords | program_keywords
-
-        if not union:
-            return 0.0
-
-        return len(overlap) / len(union)
+        return best_score
 
     @staticmethod
     def _calc_degree_match(scholarship: dict[str, Any], program_metadata: dict[str, Any]) -> float:
         """Degree-level match (15% weight). Returns 1.0 if exact match, 0.0 otherwise."""
-        eligibility = scholarship.get("eligibility_criteria") or {}
-        if isinstance(eligibility, str):
-            return 0.5
-
-        scholarship_degrees = eligibility.get("degree_level", [])
+        scholarship_degrees = LinkingService._criterion_values(scholarship, "degree_level")
 
         if not scholarship_degrees:
             return 1.0
@@ -151,18 +245,27 @@ class LinkingService:
             "bsc": "bachelor",
             "ba": "bachelor",
             "master": "master",
+            "masters": "master",
             "ms": "master",
             "msc": "master",
             "ma": "master",
             "master_coursework": "master",
+            "master coursework": "master",
             "master_research": "master",
+            "master research": "master",
             "phd": "phd",
+            "postdoc": "phd",
+            "postdoctoral": "phd",
             "doctoral": "phd",
             "doctorate": "phd",
         }
 
-        normalized_program = degree_map.get(program_degree.lower(), program_degree.lower())
-        normalized_scholarship = [degree_map.get(d.lower(), d.lower()) for d in scholarship_degrees]
+        program_key = LinkingService._normalize_text(program_degree)
+        normalized_program = degree_map.get(program_degree.lower(), degree_map.get(program_key, program_key))
+        normalized_scholarship = [
+            degree_map.get(LinkingService._normalize_text(d), LinkingService._normalize_text(d))
+            for d in scholarship_degrees
+        ]
 
         if normalized_program in normalized_scholarship:
             return 1.0
@@ -172,13 +275,10 @@ class LinkingService:
     @staticmethod
     def _calc_geographic_match(scholarship: dict[str, Any], program_metadata: dict[str, Any]) -> float:
         """Geographic/region match (5% weight). Returns 1.0 if region matches, 0.0 otherwise."""
-        eligibility = scholarship.get("eligibility_criteria") or {}
-        if isinstance(eligibility, str):
-            return 0.5
+        scholarship_regions = LinkingService._criterion_values(scholarship, "region")
+        scholarship_nationalities = LinkingService._criterion_values(scholarship, "nationality")
 
-        scholarship_regions = eligibility.get("region", [])
-
-        if not scholarship_regions:
+        if not scholarship_regions and not scholarship_nationalities:
             return 1.0
 
         program_country = program_metadata.get("country", "")
@@ -189,7 +289,32 @@ class LinkingService:
             if entity_matches_region(program_country, region):
                 return 1.0
 
+        normalized_country = LinkingService._normalize_text(program_country)
+        for nationality in scholarship_nationalities:
+            if normalized_country == LinkingService._normalize_text(nationality):
+                return 1.0
+            if entity_matches_region(program_country, nationality):
+                return 1.0
+
         return 0.0
+
+    @staticmethod
+    def _calculate_composite_confidence(
+        university_score: float,
+        field_score: float,
+        degree_score: float,
+        geographic_score: float,
+    ) -> float:
+        """Calculate weighted composite confidence in the range 0.0-1.0."""
+        weights = settings.get_linking_weights()
+        total_weight = sum(weights.values()) or 100
+        confidence = (
+            weights["university"] * university_score
+            + weights["field"] * field_score
+            + weights["degree"] * degree_score
+            + weights["geographic"] * geographic_score
+        ) / total_weight
+        return max(0.0, min(1.0, confidence))
 
     @staticmethod
     def _determine_link_type(

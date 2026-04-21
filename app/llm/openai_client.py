@@ -1,5 +1,7 @@
 """OpenAI API client with retry logic."""
 
+from __future__ import annotations
+
 import json
 
 from openai import AsyncOpenAI

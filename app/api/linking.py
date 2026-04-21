@@ -5,9 +5,11 @@
 
 from fastapi import APIRouter, Depends, Query
 
+from app.api.scholarships import _to_scholarship_response
+from app.config import settings
 from app.middleware.service_auth import require_service_token
 from app.models.linking import LinkRequest
-from app.models.scholarship import ScholarshipResponse
+from app.models.scholarship import ScholarshipSearchResponse
 from app.repositories.mysql_link_repo import LinkRepository
 from app.repositories.mysql_scholarship_repo import ScholarshipRepository
 from app.services.linking_service import LinkingService
@@ -16,39 +18,39 @@ router = APIRouter(prefix="/api/v1/scholarships", tags=["Linking"], dependencies
 
 
 @router.get("/by-program/{program_id}")
-async def get_scholarships_by_program(
+async def get_scholarships_by_program(  # pylint: disable=too-many-locals
     program_id: str,
-    min_confidence: float = Query(default=0.4, ge=0.0, le=1.0),
-):
-    """Get all scholarships linked to a specific program, sorted by confidence."""
+    min_confidence: float | None = Query(default=None, ge=0.0, le=1.0, description="Minimum link confidence"),
+    page: int = Query(default=1, ge=1, description="Page number"),
+    limit: int = Query(default=20, ge=1, le=100, description="Items per page"),
+) -> ScholarshipSearchResponse:
+    """Get scholarships linked to a specific program, sorted by link confidence."""
     link_repo = LinkRepository()
     scholarship_repo = ScholarshipRepository()
+    threshold = settings.MIN_LINK_CONFIDENCE_SCORE if min_confidence is None else min_confidence
 
-    links = await link_repo.get_by_program_id(program_id=program_id, min_confidence=min_confidence)
+    total = await link_repo.count_by_program_id(program_id=program_id, min_confidence=threshold)
+    links = await link_repo.get_by_program_id(
+        program_id=program_id, min_confidence=threshold, limit=limit, offset=(page - 1) * limit
+    )
 
-    scholarships = []
+    scholarship_ids = [link["scholarship_id"] for link in links]
+    scholarships_by_id = (
+        {s["id"]: s for s in await scholarship_repo.search_scholarships(scholarship_ids=scholarship_ids, limit=limit)}
+        if scholarship_ids
+        else {}
+    )
+
+    data = []
     for link in links:
-        scholarship = await scholarship_repo.get_by_id(link["scholarship_id"])
-        if scholarship:
-            scholarships.append(
-                ScholarshipResponse(
-                    id=scholarship["id"],
-                    name=scholarship["name"],
-                    provider=scholarship["provider"],
-                    funding_amount=scholarship.get("funding_amount"),
-                    currency=scholarship.get("currency", "USD"),
-                    deadline=scholarship.get("deadline"),
-                    description=scholarship.get("description"),
-                    eligibility_criteria=scholarship.get("eligibility_criteria"),
-                    application_requirements=scholarship.get("application_requirements"),
-                    source_url=scholarship["source_url"],
-                    crawled_at=scholarship.get("crawled_at"),
-                    link_confidence=link["confidence_score"],
-                    link_type=link["link_type"],
-                )
-            )
+        scholarship = scholarships_by_id.get(link["scholarship_id"])
+        if not scholarship:
+            continue
+        scholarship["link_confidence"] = link.get("confidence_score")
+        scholarship["link_type"] = link.get("link_type")
+        data.append(_to_scholarship_response(scholarship))
 
-    return {"success": True, "data": scholarships}
+    return ScholarshipSearchResponse(success=True, data=data, total=total, page=page, page_size=limit)
 
 
 @router.post("/link", response_model=dict)

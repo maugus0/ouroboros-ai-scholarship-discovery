@@ -1,8 +1,12 @@
 """Scrapy pipelines for data validation and database storage."""
 
+import asyncio
+
 from scrapy.exceptions import DropItem
+from scrapy.utils.defer import deferred_from_coro
 
 from app.core.logging import get_logger
+from app.services.crawl_service import CrawlService
 
 logger = get_logger(__name__)
 
@@ -35,11 +39,35 @@ class StoreScholarshipPipeline:
 
     def __init__(self):
         self.items: list[dict] = []
+        self.crawl_service = CrawlService()
 
-    def process_item(self, item, spider):  # pylint: disable=unused-argument
+    def process_item(self, item, spider):
         self.items.append(dict(item))
         logger.info("scholarship_item_queued", scholarship_name=item.get("name"))
         return item
 
     def close_spider(self, spider):
-        logger.info("spider_closed", spider=spider.name, items_queued=len(self.items))
+        logger.info("spider_closed_processing", spider=spider.name, items_queued=len(self.items))
+        if not self.items:
+            return None
+
+        active_programs = spider.settings.get("ACTIVE_PROGRAMS", [])
+
+        async def process_all():
+            semaphore = asyncio.Semaphore(5)
+
+            async def process(item):
+                async with semaphore:
+                    try:
+                        await self.crawl_service._process_scraped_item(item, active_programs)
+                    except Exception as e:
+                        logger.error(
+                            "pipeline_processing_failed",
+                            error=str(e),
+                            source_url=item.get("source_url"),
+                            spider=spider.name,
+                        )
+
+            await asyncio.gather(*(process(item) for item in self.items))
+
+        return deferred_from_coro(process_all())

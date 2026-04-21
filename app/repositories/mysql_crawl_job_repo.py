@@ -66,7 +66,7 @@ class CrawlJobRepository(MySQLBaseRepository):
             params.append(scholarships_updated)
 
         params.append(job_id)
-        query = f"UPDATE crawl_jobs SET {', '.join(set_parts)} WHERE id = %s"
+        query = f"UPDATE crawl_jobs SET {', '.join(set_parts)} WHERE id = %s"  # nosec B608
         rows = await self.execute_write(query, tuple(params))
         logger.info("crawl_job_updated", job_id=job_id, status=status)
         return rows

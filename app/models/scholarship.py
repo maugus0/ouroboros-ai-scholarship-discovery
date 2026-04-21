@@ -34,7 +34,7 @@ class ScholarshipResponse(BaseModel):
     name: str
     provider: str
     funding_amount: Optional[float] = None
-    currency: str = "USD"
+    currency: Optional[str] = None
     deadline: Optional[date] = None
     description: Optional[str] = None
     eligibility_criteria: Optional[dict[str, Any]] = None

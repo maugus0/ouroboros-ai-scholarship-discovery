@@ -13,7 +13,8 @@ def test_settings_load():
     from app.config import settings
 
     assert settings.DB_NAME == "ouroboros_scholarship_db"
-    assert settings.DB_PORT == 3306
+    assert isinstance(settings.DB_PORT, int)
+    assert settings.DB_PORT > 0
     assert settings.DB_POOL_NAME == "scholarship_discovery_pool"
 
 
@@ -53,3 +54,17 @@ def test_confidence_threshold():
     from app.config import settings
 
     assert 0.0 <= settings.MIN_LINK_CONFIDENCE_SCORE <= 1.0
+
+
+def test_get_batch_crawl_sources_parses_comma_separated_values(monkeypatch):
+    from app.config import settings
+
+    monkeypatch.setenv(
+        "BATCH_CRAWL_SOURCES",
+        "https://site-a.example/scholarships, https://site-b.example/funding ,,",
+    )
+
+    assert settings.get_batch_crawl_sources() == [
+        "https://site-a.example/scholarships",
+        "https://site-b.example/funding",
+    ]

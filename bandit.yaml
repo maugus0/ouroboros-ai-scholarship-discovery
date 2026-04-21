@@ -1,0 +1,4 @@
+# Bandit configuration for Scholarship Discovery Agent.
+# Keep `skips` empty; use inline `# nosec B###` on the exact flagged line when justified
+# (see crawlers + mysql repos). Re-run: bandit -r app/ -c bandit.yaml
+skips: []

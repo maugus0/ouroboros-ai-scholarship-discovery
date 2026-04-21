@@ -37,7 +37,17 @@ class EligibilityFilterService:
 
     def _meets_all_mandatory(self, profile: dict[str, Any], criteria: list[dict[str, Any]]) -> bool:
         """Check if student meets all mandatory criteria."""
-        for criterion in criteria:
+        mandatory_criteria = [criterion for criterion in criteria if criterion.get("is_mandatory", True)]
+        language_criteria = [
+            criterion for criterion in mandatory_criteria if criterion.get("criterion_type") == "language_test"
+        ]
+
+        if language_criteria and not any(self._meets_criterion(profile, criterion) for criterion in language_criteria):
+            return False
+
+        for criterion in mandatory_criteria:
+            if criterion.get("criterion_type") == "language_test":
+                continue
             if not criterion.get("is_mandatory", True):
                 continue
 

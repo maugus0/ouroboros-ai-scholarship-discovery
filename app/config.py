@@ -47,6 +47,7 @@ class Settings(BaseSettings):
 
     SCHOLARSHIP_STALENESS_DAYS: int = 30
     BATCH_CRAWL_CRON: str = "0 3 * * 0"
+    BATCH_CRAWL_SOURCES: str = ""
 
     # ========== 4-Dimension Linking Weights (must sum to 100) ==========
     LINKING_WEIGHT_UNIVERSITY: int = 50
@@ -91,6 +92,11 @@ class Settings(BaseSettings):
             "degree": self.LINKING_WEIGHT_DEGREE,
             "geographic": self.LINKING_WEIGHT_GEOGRAPHIC,
         }
+
+    def get_batch_crawl_sources(self) -> list[str]:
+        """Return configured scholarship source listing URLs for scheduled incremental crawls."""
+        raw = os.getenv("BATCH_CRAWL_SOURCES", self.BATCH_CRAWL_SOURCES)
+        return [item.strip() for item in raw.split(",") if item.strip()]
 
 
 settings = Settings()
