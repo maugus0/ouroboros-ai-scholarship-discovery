@@ -18,7 +18,7 @@ router = APIRouter(prefix="/api/v1/scholarships", tags=["Linking"], dependencies
 
 
 @router.get("/by-program/{program_id}")
-async def get_scholarships_by_program(
+async def get_scholarships_by_program(  # pylint: disable=too-many-locals
     program_id: str,
     min_confidence: float | None = Query(default=None, ge=0.0, le=1.0, description="Minimum link confidence"),
     page: int = Query(default=1, ge=1, description="Page number"),
@@ -28,28 +28,29 @@ async def get_scholarships_by_program(
     link_repo = LinkRepository()
     scholarship_repo = ScholarshipRepository()
     threshold = settings.MIN_LINK_CONFIDENCE_SCORE if min_confidence is None else min_confidence
-    links = await link_repo.get_by_program_id(program_id=program_id, min_confidence=threshold)
 
-    start = (page - 1) * limit
-    page_links = links[start : start + limit]
-    scholarships = []
-    for link in page_links:
-        scholarship = await scholarship_repo.get_by_id(link["scholarship_id"])
+    total = await link_repo.count_by_program_id(program_id=program_id, min_confidence=threshold)
+    links = await link_repo.get_by_program_id(
+        program_id=program_id, min_confidence=threshold, limit=limit, offset=(page - 1) * limit
+    )
+
+    scholarship_ids = [link["scholarship_id"] for link in links]
+    scholarships_by_id = (
+        {s["id"]: s for s in await scholarship_repo.search_scholarships(scholarship_ids=scholarship_ids, limit=limit)}
+        if scholarship_ids
+        else {}
+    )
+
+    data = []
+    for link in links:
+        scholarship = scholarships_by_id.get(link["scholarship_id"])
         if not scholarship:
             continue
         scholarship["link_confidence"] = link.get("confidence_score")
         scholarship["link_type"] = link.get("link_type")
-        scholarships.append(scholarship)
+        data.append(_to_scholarship_response(scholarship))
 
-    data = [_to_scholarship_response(scholarship) for scholarship in scholarships]
-
-    return ScholarshipSearchResponse(
-        success=True,
-        data=data,
-        total=len(links),
-        page=page,
-        page_size=limit,
-    )
+    return ScholarshipSearchResponse(success=True, data=data, total=total, page=page, page_size=limit)
 
 
 @router.post("/link", response_model=dict)

@@ -149,12 +149,23 @@ class FakeLinkRepository:
                 out.append(sid)
         return out
 
-    async def get_by_program_id(self, program_id, min_confidence=0.0) -> list[dict[str, Any]]:
-        return [
+    async def get_by_program_id(self, program_id, min_confidence=0.0, limit=None, offset=0) -> list[dict[str, Any]]:
+        rows = [
             row
             for row in self._store.values()
             if row.get("program_id") == program_id and row.get("confidence_score", 0) >= min_confidence
         ]
+        rows.sort(key=lambda r: r.get("confidence_score", 0), reverse=True)
+        if limit is not None:
+            return rows[offset : offset + limit]
+        return rows
+
+    async def count_by_program_id(self, program_id, min_confidence=0.0) -> int:
+        return sum(
+            1
+            for row in self._store.values()
+            if row.get("program_id") == program_id and row.get("confidence_score", 0) >= min_confidence
+        )
 
     async def get_by_scholarship_id(self, scholarship_id) -> list[dict[str, Any]]:
         return [row for row in self._store.values() if row.get("scholarship_id") == scholarship_id]

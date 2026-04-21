@@ -16,5 +16,6 @@ CREATE TABLE IF NOT EXISTS scholarships (
     INDEX idx_provider (provider),
     INDEX idx_deadline (deadline),
     INDEX idx_crawled_at (crawled_at),
+    UNIQUE INDEX idx_source_url (source_url),
     FULLTEXT INDEX ft_name_description (name, description)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

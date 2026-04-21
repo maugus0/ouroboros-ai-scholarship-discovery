@@ -45,10 +45,10 @@ class EligibilityCriteriaBuilder:
         "university",
     )
     REGION_KEYWORDS = {
-        "Africa": r"\bAfrica|African\b",
-        "Asia": r"\bAsia|Asian\b",
-        "Europe": r"\bEurope|European\b",
-        "South America": r"\bSouth America|Latin America\b",
+        "Africa": r"\b(?:Africa|African)\b",
+        "Asia": r"\b(?:Asia|Asian)\b",
+        "Europe": r"\b(?:Europe|European)\b",
+        "South America": r"\b(?:South America|Latin America)\b",
         "North America": r"\bNorth America\b",
         "Oceania": r"\bOceania\b",
     }

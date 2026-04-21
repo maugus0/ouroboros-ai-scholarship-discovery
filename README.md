@@ -379,18 +379,27 @@ All endpoints except health checks require the `X-Service-Token` header.
 {
   "student_profile": {
     "gpa": 3.8,
+    "gpa_scale": 4.0,
     "nationality": "India",
     "field_of_study": "Computer Science",
     "degree_type": "master",
     "language_test": "IELTS 7.5"
   },
   "program_ids": ["prog-123", "prog-456"],
+  "provider": "DAAD",
   "max_results": 20,
   "page": 1
 }
 ```
 
-`student_profile` is optional; when omitted, search skips the eligibility filter. `provider` is optional (substring match). When `program_ids` is non-empty, only scholarships with rows in `scholarship_program_links` for those program IDs are returned (pagination applies after that filter).
+| Field | Required | Description |
+|-------|----------|-------------|
+| `student_profile` | No | When provided, filters scholarships by eligibility |
+| `student_profile.gpa_scale` | No | GPA scale (default 4.0) for normalization |
+| `program_ids` | No | Filter to scholarships linked to these programs |
+| `provider` | No | Substring match on provider name |
+| `max_results` | No | Page size (1-100, default 20) |
+| `page` | No | Page number (default 1) |
 
 ### Scholarship-Program Linking
 
@@ -582,35 +591,61 @@ tests/
 
 ## CI/CD Pipeline
 
-**Workflow**: `.github/workflows/deploy.yml` (header comments reference **ORB-14** for alignment with platform-wide setup tickets)
+**Workflow**: `.github/workflows/deploy.yml`
 
-**Trigger**: Pull requests to `main` or `develop`
+**Triggers**:
+- Pull requests to `main` or `develop` (opened, synchronize, reopened)
+- Push to `main` (triggers Docker push to GHCR + Trivy scan)
+
+**Concurrency**: Superseded runs on the same ref are auto-cancelled to save runner minutes.
 
 ### Pipeline Stages
 
-| Stage | Description |
-|-------|-------------|
-| **Format** | Black + isort validation |
-| **Lint** | flake8 + pylint |
-| **Unit Tests** | pytest with JUnit XML output |
-| **Type Check** | mypy static analysis (after format + lint) |
-| **Integration Tests** | pytest with coverage (after format + lint) |
-| **Security Audit** | Bandit static analysis (after format + lint) |
-| **Docker Build** | Verify image builds (after all above) |
-| **Summary** | Markdown table of all job results |
+| Stage | Job Name | Description |
+|-------|----------|-------------|
+| **1** | `format` | Black + isort validation |
+| **1** | `lint` | flake8 + pylint |
+| **1** | `unit-tests` | pytest with JUnit XML output |
+| **2** | `type-check` | mypy static analysis (needs Stage 1) |
+| **2** | `integration-tests` | pytest with coverage HTML + XML (needs Stage 1) |
+| **2** | `security-static` | Bandit static analysis with `bandit.yaml` config |
+| **2** | `security-scan` | Snyk OSS dependency scan (skipped if no `SNYK_TOKEN`) |
+| **3** | `docker-build` | Build & push to GHCR (push to main only) |
+| **4** | `trivy-scan` | Container vulnerability scan (push to main only) |
+| **5** | `reports-summary` | Consolidated CI report bundle |
 
 ### Pipeline Graph
 
 ```
-format ──┐
-         ├──> type-check ──┐
-lint   ──┤                  │
-         ├──> integration ──┼──> build-docker ──> summary
-         │                  │
-         └──> security   ──┘
-
-unit-tests (independent) ──────> build-docker
+                    ┌──> type-check ────────────┐
+format  ───┐        │                           │
+           ├────────┼──> integration-tests ─────┤
+lint    ───┤        │                           ├──> docker-build ──> trivy-scan ──> reports-summary
+           │        ├──> security-static ───────┤         │
+unit-tests ┴────────┼──> security-scan ─────────┘         │
+                    │                                     │
+                    └─────────────────────────────────────┘
 ```
+
+### Security Scans
+
+| Tool | Scope | Config |
+|------|-------|--------|
+| **Bandit** | Static Python code analysis | `bandit.yaml` (inline `# nosec B###` for false positives) |
+| **Snyk OSS** | Dependency vulnerabilities | Requires `SNYK_TOKEN` secret; `continue-on-error: true` |
+| **Trivy** | Container image vulnerabilities | Runs on GHCR image after push to main |
+
+### Artifacts
+
+| Artifact | Contents |
+|----------|----------|
+| `test-results` | JUnit XML from unit tests |
+| `coverage-report` | HTML coverage report |
+| `coverage-xml` | Cobertura XML for dashboards |
+| `security-reports-bandit` | Bandit JSON report |
+| `snyk-sarif` | Snyk SARIF for Code Scanning |
+| `trivy-report` | Trivy JSON vulnerability report |
+| `ci-reports` | Consolidated summary markdown |
 
 ---
 
@@ -729,6 +764,7 @@ ouroboros-ai-scholarship-discovery/
 ├── pytest.ini
 ├── .flake8
 ├── .pylintrc
+├── bandit.yaml                          # Bandit security scan config
 ├── .env.example
 ├── Dockerfile
 ├── docker-compose.yml

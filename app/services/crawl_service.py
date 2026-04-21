@@ -30,6 +30,20 @@ class CrawlService:
         "unknown scholarship",
     }
 
+    _ALLOWED_CRITERION_TYPES = frozenset(
+        {
+            "min_gpa",
+            "nationality",
+            "region",
+            "field_of_study",
+            "degree_level",
+            "language_test",
+            "work_experience",
+            "age_limit",
+            "other",
+        }
+    )
+
     def __init__(self):
         self.crawl_job_repo = CrawlJobRepository()
         self.scholarship_service = ScholarshipService()
@@ -412,14 +426,22 @@ class CrawlService:
         if criteria_text:
             parsed_criteria = await self.llm_service.parse_eligibility(criteria_text)
 
-        criteria_to_store = deterministic_criteria + [
-            {
-                "criterion_type": criterion.get("type", "other"),
-                "criterion_value": criterion.get("value", ""),
-                "is_mandatory": criterion.get("is_mandatory", True),
-            }
-            for criterion in parsed_criteria
-        ]
+        llm_criteria = []
+        for criterion in parsed_criteria:
+            raw_type = criterion.get("type", "other")
+            criterion_type = raw_type if raw_type in self._ALLOWED_CRITERION_TYPES else "other"
+            criterion_value = str(criterion.get("value", "")).strip()
+            if not criterion_value:
+                continue
+            llm_criteria.append(
+                {
+                    "criterion_type": criterion_type,
+                    "criterion_value": criterion_value,
+                    "is_mandatory": criterion.get("is_mandatory", True),
+                }
+            )
+
+        criteria_to_store = deterministic_criteria + llm_criteria
         criteria_to_store = EligibilityCriteriaBuilder._dedupe(criteria_to_store)
         if not criteria_to_store:
             return

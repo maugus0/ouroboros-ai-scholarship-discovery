@@ -49,6 +49,7 @@ def _to_scholarship_response(scholarship: dict[str, Any]) -> ScholarshipResponse
         application_requirements=_json_field(scholarship.get("application_requirements")),
         source_url=scholarship["source_url"],
         crawled_at=scholarship.get("crawled_at"),
+        is_active=scholarship.get("is_active", True),
         link_confidence=scholarship.get("link_confidence"),
         link_type=scholarship.get("link_type"),
     )
