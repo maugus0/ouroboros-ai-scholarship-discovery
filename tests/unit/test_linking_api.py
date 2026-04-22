@@ -7,10 +7,10 @@ from app.main import app
 client = TestClient(app)
 
 
-def test_get_scholarships_by_program_returns_standard_paginated_shape(service_token_header):
+def test_get_scholarships_by_program_returns_standard_paginated_shape(internal_token_header):
     response = client.get(
         "/api/v1/scholarships/by-program/prog-001?page=1&limit=10",
-        headers=service_token_header,
+        headers=internal_token_header,
     )
 
     assert response.status_code in (200, 503)

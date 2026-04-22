@@ -1,13 +1,12 @@
 """FastAPI dependency for inter-service internal bearer token validation."""
 
-import json
 import time
 from typing import Any, cast
 
 import httpx
 import jwt
 from fastapi import HTTPException, Request
-from jwt.algorithms import RSAAlgorithm
+from jwt import PyJWK
 
 from app.config import settings
 from app.core.logging import get_logger
@@ -68,7 +67,7 @@ def _normalize_key(raw_value: str) -> str:
 
 def _decode_jwks_key(jwk: dict) -> object | None:
     try:
-        return RSAAlgorithm.from_jwk(json.dumps(jwk))
+        return PyJWK.from_dict(jwk).key
     except Exception as exc:  # pylint: disable=broad-exception-caught
         logger.warning("invalid_internal_jwk", error=str(exc), kid=jwk.get("kid"))
         return None

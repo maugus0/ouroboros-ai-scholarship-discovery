@@ -1,5 +1,7 @@
 """Pytest configuration and shared fixtures."""
 
+# pylint: disable=C0415
+
 import os
 from datetime import datetime, timedelta, timezone
 
@@ -16,11 +18,11 @@ os.environ.setdefault("INTERNAL_TOKEN_PUBLIC_KEY", INTERNAL_TEST_KEY)
 os.environ.setdefault("INTERNAL_TOKEN_ISSUER", "ouroboros-orchestrator-internal")
 os.environ.setdefault("INTERNAL_TOKEN_AUDIENCE", "ouroboros.scholarship-discovery")
 
-from app.config import settings  # noqa: E402  # pylint: disable=wrong-import-position
-
 
 @pytest.fixture
 def mock_settings():
+    from app.config import settings
+
     return {
         "DB_HOST": "localhost",
         "DB_NAME": "test_db",
@@ -35,8 +37,10 @@ def mock_settings():
 
 
 @pytest.fixture
-def service_token_header():
+def internal_token_header():
     """Generate a valid internal bearer token for tests."""
+    from app.config import settings
+
     now = datetime.now(timezone.utc)
     payload = {
         "sub": "user-123",
@@ -48,7 +52,7 @@ def service_token_header():
         "trace_id": "trace-123",
         "jti": "jti-123",
     }
-    token = jwt.encode(payload, settings.INTERNAL_TOKEN_PUBLIC_KEY, algorithm="HS256")
+    token = jwt.encode(payload, settings.INTERNAL_TOKEN_PUBLIC_KEY, algorithm=settings.INTERNAL_TOKEN_SIGNING_ALGORITHM)
     return {"Authorization": f"Bearer {token}"}
 
 

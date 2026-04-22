@@ -23,7 +23,7 @@ class Settings(BaseSettings):
     DB_CONNECTION_TIMEOUT: int = 20
 
     # ========== Inter-Service Auth ==========
-    INTERNAL_TOKEN_VERIFY_ENABLED: bool = False
+    INTERNAL_TOKEN_VERIFY_ENABLED: bool = True
     INTERNAL_TOKEN_SIGNING_ALGORITHM: str = "RS256"
     INTERNAL_TOKEN_PUBLIC_KEY: str = ""
     INTERNAL_TOKEN_PUBLIC_KEYS: str = "{}"
