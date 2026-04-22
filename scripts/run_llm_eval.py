@@ -271,11 +271,14 @@ def main() -> int:
         return asyncio.run(run_eval())
     except Exception as exc:  # pylint: disable=broad-exception-caught
         output_path = Path(os.getenv("LLM_EVAL_OUTPUT_PATH", str(DEFAULT_OUTPUT_PATH)))
+        baseline_score = _env_float("LLM_EVAL_BASELINE_SCORE", 8.0)
+        allowed_drop = _env_float("LLM_EVAL_ALLOWED_DROP", 0.5)
         fallback_results = {
             "task": "scholarship_discovery_quality_eval",
             "model": os.getenv("LLM_EVAL_MODEL", "gpt-4o-mini"),
-            "baseline_score": os.getenv("LLM_EVAL_BASELINE_SCORE", "8.0"),
-            "allowed_drop": os.getenv("LLM_EVAL_ALLOWED_DROP", "0.5"),
+            "baseline_score": baseline_score,
+            "allowed_drop": allowed_drop,
+            "minimum_allowed_score": baseline_score - allowed_drop,
             "average_score": 0.0,
             "passed": False,
             "error": str(exc),
