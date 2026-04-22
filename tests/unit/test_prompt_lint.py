@@ -35,31 +35,19 @@ def test_prompt_structure_and_limits(prompt_file):
     data = json.loads(content)
 
     assert "prompt_template" in data, f"Missing 'prompt_template' in {prompt_file.name}"
-    assert isinstance(data["prompt_template"], dict), (
-        f"'prompt_template' must be an object in {prompt_file.name}"
-    )
+    assert isinstance(data["prompt_template"], dict), f"'prompt_template' must be an object in {prompt_file.name}"
 
     assert "base" in data["prompt_template"], f"Missing 'base' in {prompt_file.name}"
     base = data["prompt_template"]["base"]
     assert isinstance(base, dict), f"'base' must be an object in {prompt_file.name}"
 
-    assert isinstance(base.get("agent_identity"), dict), (
-        f"Missing or invalid 'agent_identity' in {prompt_file.name}"
-    )
-    assert isinstance(base.get("task_instructions"), dict), (
-        f"Missing or invalid 'task_instructions' in {prompt_file.name}"
-    )
-    assert isinstance(base.get("output_format"), dict), (
-        f"Missing or invalid 'output_format' in {prompt_file.name}"
-    )
+    assert isinstance(base.get("agent_identity"), dict), f"Missing or invalid 'agent_identity' in {prompt_file.name}"
+    assert isinstance(base.get("task_instructions"), dict), f"Missing or invalid 'task_instructions' in {prompt_file.name}"
+    assert isinstance(base.get("output_format"), dict), f"Missing or invalid 'output_format' in {prompt_file.name}"
 
     output_format = base["output_format"]
-    assert output_format.get("format") == "json", (
-        f"Output format must be 'json' in {prompt_file.name}"
-    )
-    assert "schema" in output_format, (
-        f"Output format must include a 'schema' in {prompt_file.name}"
-    )
+    assert output_format.get("format") == "json", f"Output format must be 'json' in {prompt_file.name}"
+    assert "schema" in output_format, f"Output format must include a 'schema' in {prompt_file.name}"
 
     assert "runtime_context" not in base, (
         f"Prompt {prompt_file.name} should not hardcode 'runtime_context'. "
@@ -91,9 +79,7 @@ def test_prompt_no_legacy_placeholders(prompt_file):
             for item in obj:
                 check_no_placeholders_in_strings(item)
         elif isinstance(obj, str):
-            matches = sorted(
-                set(re.findall(r"(?<!\{)\{([a-zA-Z_][a-zA-Z0-9_]*)\}(?!\})", obj))
-            )
+            matches = sorted(set(re.findall(r"(?<!\{)\{([a-zA-Z_][a-zA-Z0-9_]*)\}(?!\})", obj)))
             assert not matches, (
                 f"Unsupported placeholder(s) in {prompt_file.name}: {matches}. "
                 f"Found in string: {obj!r}. "
