@@ -588,8 +588,8 @@ python scripts/run_migrations.py
 python scripts/seed_scholarship_sources.py
 python scripts/seed_nus_scholarships.py
 
-# Import crawled data
-python scripts/import_spider_output.py --file crawl_output.json
+# Import crawled data (positional file argument)
+python scripts/import_spider_output.py crawl_output.json
 
 # Check data quality after import
 python scripts/check_import_quality.py
