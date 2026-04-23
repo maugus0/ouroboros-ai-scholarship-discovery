@@ -1,14 +1,14 @@
-"""ASGI middleware for inter-service X-Service-Token validation."""
+"""ASGI middleware for inter-service Bearer token validation."""
 
 from __future__ import annotations
 
 from collections.abc import Callable
 
-from fastapi import HTTPException, Request
+from fastapi import Request
 from fastapi.responses import JSONResponse, Response
 from starlette.middleware.base import BaseHTTPMiddleware
 
-from app.core.security import validate_service_token
+from app.middleware.service_auth import require_service_token
 
 
 class ServiceTokenMiddleware(BaseHTTPMiddleware):
@@ -23,14 +23,16 @@ class ServiceTokenMiddleware(BaseHTTPMiddleware):
     }
 
     async def dispatch(self, request: Request, call_next: Callable) -> Response:
-        """Protect versioned API routes with X-Service-Token."""
+        """Protect versioned API routes with Bearer token."""
         path = request.url.path
         if path in self.PUBLIC_PATHS or not path.startswith("/api/v1/"):
             return await call_next(request)
 
         try:
-            validate_service_token(request)
-        except HTTPException as exc:
-            return JSONResponse(status_code=exc.status_code, content={"detail": exc.detail})
+            await require_service_token(request)
+        except Exception as exc:
+            status_code = getattr(exc, "status_code", 401)
+            detail = getattr(exc, "detail", "Token validation failed")
+            return JSONResponse(status_code=status_code, content={"detail": detail})
 
         return await call_next(request)

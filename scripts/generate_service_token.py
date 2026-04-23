@@ -1,16 +1,9 @@
-"""Generate a secure random service token for X-Service-Token auth."""
+"""Deprecated helper.
 
-import secrets
-
-
-def generate_token(length: int = 48) -> str:
-    """Generate a URL-safe random token."""
-    return secrets.token_urlsafe(length)
-
+X-Service-Token auth has been removed. Use the internal bearer-token settings
+in `.env` instead: INTERNAL_TOKEN_VERIFY_ENABLED, INTERNAL_TOKEN_SIGNING_ALGORITHM,
+INTERNAL_TOKEN_PUBLIC_KEY, INTERNAL_TOKEN_ISSUER, and INTERNAL_TOKEN_AUDIENCE.
+"""
 
 if __name__ == "__main__":
-    token = generate_token()
-    print(f"Generated X-Service-Token ({len(token)} chars):")
-    print(f"  {token}")
-    print(f"\nAdd to .env:")
-    print(f"  X_SERVICE_TOKEN={token}")
+    print("X-Service-Token auth has been removed. Configure internal bearer-token settings in .env instead.")

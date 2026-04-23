@@ -11,7 +11,6 @@ from app.api import crawl, health, linking, scholarships
 from app.config import APP_VERSION, settings
 from app.core.logging import get_logger, setup_logging
 from app.middleware.logging_middleware import LoggingMiddleware
-from app.middleware.service_token_middleware import ServiceTokenMiddleware
 from app.repositories.db_pool import DatabasePoolConfig, close_pool, create_pool
 from app.services.scheduler_service import start_scheduler, stop_scheduler
 from app.utils.exceptions import ScholarshipDiscoveryBaseError
@@ -92,7 +91,6 @@ async def runtime_error_handler(_request: Request, exc: RuntimeError):
 # -- Middleware ---------------------------------------------------------
 
 app.add_middleware(LoggingMiddleware)
-app.add_middleware(ServiceTokenMiddleware)
 
 # -- Routers -----------------------------------------------------------
 

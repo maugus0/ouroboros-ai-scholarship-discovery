@@ -33,3 +33,4 @@ structlog>=24.4.0
 
 # Utilities
 python-dotenv>=1.0.1
+PyJWT[crypto]>=2.12.1
