@@ -247,10 +247,30 @@ All migrations completed successfully!
 Database connection closed
 ```
 
-### 5. Seed Scholarship Sources
+### 5. Seed Scholarship Data
+
+Seed the database with initial scholarship data:
 
 ```bash
+# Seed global scholarship sources (CSC, Chevening, Fulbright, DAAD, etc.)
 python scripts/seed_scholarship_sources.py
+
+# Seed comprehensive NUS scholarships (35+ scholarships with eligibility criteria)
+python scripts/seed_nus_scholarships.py
+```
+
+Expected output for NUS scholarships:
+
+```
+  ✓ Seeded: NUS Global Merit Scholarship
+  ✓ Seeded: NUS Merit Scholarship
+  ...
+============================================================
+NUS Scholarship Seeding Complete!
+============================================================
+  Scholarships created: 35
+  Eligibility criteria created: 95
+============================================================
 ```
 
 ### 6. Start the Service
@@ -533,6 +553,53 @@ Macro-region labels for `region` criteria use the same country lists as geograph
 
 ---
 
+## Utility Scripts
+
+The `scripts/` directory contains utilities for database setup, data seeding, and maintenance:
+
+### Database & Setup
+
+| Script | Purpose |
+|--------|---------|
+| `run_migrations.py` | Creates database and runs SQL migrations (001-005) |
+| `seed_scholarship_sources.py` | Seeds global scholarships (CSC, Chevening, DAAD, Fulbright, etc.) |
+| `seed_nus_scholarships.py` | Seeds 35+ NUS scholarships with full eligibility criteria |
+
+### Data Import & Crawling
+
+| Script | Purpose |
+|--------|---------|
+| `trigger_batch_crawl.py` | Triggers a background batch crawl job (status via API) |
+| `import_spider_output.py` | Imports Scrapy JSON output into database |
+| `check_import_quality.py` | Validates import quality (detects mojibake, missing fields) |
+| `backfill_eligibility_criteria.py` | Extracts eligibility criteria from JSON using LLM |
+
+### Testing & Evaluation
+
+| Script | Purpose |
+|--------|---------|
+| `run_llm_eval.py` | Runs LLM-as-judge golden evaluations for extraction quality |
+
+### Example Usage
+
+```bash
+# Full setup sequence
+python scripts/run_migrations.py
+python scripts/seed_scholarship_sources.py
+python scripts/seed_nus_scholarships.py
+
+# Import crawled data
+python scripts/import_spider_output.py --file crawl_output.json
+
+# Check data quality after import
+python scripts/check_import_quality.py
+
+# Backfill eligibility criteria using LLM
+python scripts/backfill_eligibility_criteria.py --limit 100
+```
+
+---
+
 ## Development Workflow
 
 ### Code Quality Checks
@@ -758,13 +825,13 @@ ouroboros-ai-scholarship-discovery/
 │   └── field_classification_v1.json
 ├── scripts/
 │   ├── run_migrations.py              # Create DB + execute migrations
-│   ├── seed_scholarship_sources.py    # Load sample scholarship data
-│   ├── trigger_batch_crawl.py         # Manual batch crawl trigger
-│   ├── import_spider_output.py        # Import Scrapy JSON output
-│   ├── check_import_quality.py        # Validate imported data quality
-│   ├── backfill_eligibility_criteria.py # Backfill criteria via LLM
-│   ├── run_llm_eval.py                # Run LLM evaluation tests
-│   └── generate_service_token.py      # Deprecated (internal JWT now used)
+│   ├── seed_scholarship_sources.py    # Seed global scholarships (Chevening, DAAD, etc.)
+│   ├── seed_nus_scholarships.py       # Seed 35+ NUS scholarships with eligibility
+│   ├── trigger_batch_crawl.py         # Trigger background crawl job
+│   ├── import_spider_output.py        # Import Scrapy JSON crawl output
+│   ├── check_import_quality.py        # Validate data quality (mojibake, etc.)
+│   ├── backfill_eligibility_criteria.py # Extract criteria from JSON via LLM
+│   └── run_llm_eval.py                # Run LLM-as-judge golden evaluations
 ├── tests/
 │   ├── unit/                           # Unit tests (14 files)
 │   └── integration/                    # Integration tests (2 files)
