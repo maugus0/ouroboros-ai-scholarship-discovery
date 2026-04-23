@@ -64,3 +64,18 @@ async def close_pool() -> None:
         await _pool.wait_closed()
         _pool = None
         logger.info("database_pool_closed")
+
+
+async def is_database_connected() -> bool:
+    """Return True when the global pool exists and can serve a simple query."""
+    if _pool is None:
+        return False
+
+    try:
+        async with _pool.acquire() as conn:
+            async with conn.cursor() as cursor:
+                await cursor.execute("SELECT 1")
+                row = await cursor.fetchone()
+        return bool(row)
+    except Exception:  # pylint: disable=broad-exception-caught
+        return False

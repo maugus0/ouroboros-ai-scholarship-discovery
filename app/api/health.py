@@ -3,6 +3,7 @@
 from fastapi import APIRouter
 
 from app.config import APP_VERSION
+from app.repositories.db_pool import is_database_connected
 
 router = APIRouter(tags=["Health"])
 
@@ -18,8 +19,9 @@ async def root():
 
 @router.get("/health")
 async def health_check():
+    database_status = "connected" if await is_database_connected() else "not_connected"
     return {
         "status": "healthy",
         "version": APP_VERSION,
-        "database": "not_connected",
+        "database": database_status,
     }
