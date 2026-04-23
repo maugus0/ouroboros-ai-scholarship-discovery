@@ -52,7 +52,7 @@ The Scholarship Discovery Agent is responsible for:
 
 ## Comparison with Program Discovery Agent
 
-Both agents are sibling microservices: same **FastAPI + aiomysql + repository pattern**, **X-Service-Token** auth, **structlog** middleware, **Scrapy + httpx/BeautifulSoup** crawling, **OpenAI → Anthropic** LLM fallback, **APScheduler** batch jobs, **numbered SQL migrations**, and the same **7-job GitHub Actions** shape (`format`, `lint`, `unit-tests`, `type-check`, `integration`, `security`, `Docker build`). Differences are domain, data model, and scoring.
+Both agents are sibling microservices: same **FastAPI + aiomysql + repository pattern**, **internal JWT bearer auth**, **structlog** middleware, **Scrapy + httpx/BeautifulSoup** crawling, **OpenAI → Anthropic** LLM fallback, **APScheduler** batch jobs, **numbered SQL migrations**, and the same **7-job GitHub Actions** shape (`format`, `lint`, `unit-tests`, `type-check`, `integration`, `security`, `Docker build`). Differences are domain, data model, and scoring.
 
 | Topic | Program Discovery (`ouroboros-ai-program-discovery`) | Scholarship Discovery (this repo) |
 |-------|------------------------------------------------------|-----------------------------------|
@@ -85,7 +85,7 @@ Both agents are sibling microservices: same **FastAPI + aiomysql + repository pa
                ▼
 ┌──────────────────────────────────────────────────────┐
 │          Orchestrator Service (8000)                  │
-│          X-Service-Token                             │
+│          Internal JWT Bearer Token                   │
 └──────────────┬───────────────────────────────────────┘
                │
                ▼
@@ -147,7 +147,7 @@ Both agents are sibling microservices: same **FastAPI + aiomysql + repository pa
 - **Centralized region data**: `app/utils/region_mapping.py` backs eligibility `region` criteria and the geographic linking dimension
 - **Eligibility Filtering**: Strict binary matching against student profiles (mandatory vs preferred criteria)
 - **Scheduled Crawls**: APScheduler for weekly batch updates (Sunday 3 AM UTC)
-- **Service Auth**: X-Service-Token middleware (orchestrator-only access)
+- **Service Auth**: Internal JWT bearer auth middleware (orchestrator-only access)
 - **Raw SQL**: aiomysql with repository pattern (no ORM)
 - **LLM Cost Tracking**: Token usage and cost per API call logged to database
 - **Scholarship Staleness**: Auto-flag scholarships not crawled in 30+ days
@@ -188,23 +188,22 @@ cp .env.example .env
 Edit `.env` with your credentials:
 
 ```bash
+# Database
 DB_HOST=localhost
 DB_NAME=ouroboros_scholarship_db
 DB_USERNAME=root
 DB_PASSWORD=your_mysql_password
 
-X_SERVICE_TOKEN=your-48-char-random-token
-OPENAI_API_KEY=sk-your-openai-key
+# LLM Keys (copy from other agent .env files)
+OPENAI_API_KEY=sk-your-openai-key-here
+ANTHROPIC_API_KEY=sk-ant-your-anthropic-key-here
+
+# Internal Auth (copy public key from orchestrator)
+INTERNAL_TOKEN_VERIFY_ENABLED=true
+INTERNAL_TOKEN_PUBLIC_KEY="-----BEGIN PUBLIC KEY-----\n...\n-----END PUBLIC KEY-----"
 ```
 
-### 3. Generate Service Token
-
-```bash
-python scripts/generate_service_token.py
-# Add output to .env as X_SERVICE_TOKEN
-```
-
-### 4. Database Setup
+### 3. Database Setup
 
 **Option A: Docker (Recommended)**
 
@@ -215,11 +214,14 @@ docker compose logs -f mysql   # wait for "ready for connections"
 
 **Option B: Local MySQL**
 
-```bash
-mysql -u root -p -e "CREATE DATABASE ouroboros_scholarship_db CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;"
-```
+Ensure MySQL is running. No need to create the database manually — the migration script handles it.
 
-### 5. Run Migrations
+### 4. Run Migrations
+
+The migration script will:
+- Create the database if it doesn't exist
+- Run all SQL migrations in order (001-005)
+- Skip already-applied migrations (idempotent)
 
 ```bash
 python scripts/run_migrations.py
@@ -228,6 +230,9 @@ python scripts/run_migrations.py
 Expected output:
 
 ```
+Starting migrations for database: ouroboros_scholarship_db
+Database 'ouroboros_scholarship_db' ready
+Found 5 migration file(s)
 Running migration: 001_create_scholarships.sql
   ✓ 001_create_scholarships.sql applied
 Running migration: 002_create_eligibility_criteria.sql
@@ -238,25 +243,45 @@ Running migration: 004_create_crawl_jobs.sql
   ✓ 004_create_crawl_jobs.sql applied
 Running migration: 005_create_llm_call_logs.sql
   ✓ 005_create_llm_call_logs.sql applied
-
-All migrations applied successfully.
+All migrations completed successfully!
+Database connection closed
 ```
 
-### 6. Seed Scholarship Sources
+### 5. Seed Scholarship Data
+
+Seed the database with initial scholarship data:
 
 ```bash
+# Seed global scholarship sources (CSC, Chevening, Fulbright, DAAD, etc.)
 python scripts/seed_scholarship_sources.py
+
+# Seed comprehensive NUS scholarships (35+ scholarships with eligibility criteria)
+python scripts/seed_nus_scholarships.py
 ```
 
-### 7. Start the Service
+Expected output for NUS scholarships:
+
+```
+  ✓ Seeded: NUS Global Merit Scholarship
+  ✓ Seeded: NUS Merit Scholarship
+  ...
+============================================================
+NUS Scholarship Seeding Complete!
+============================================================
+  Scholarships created: 35
+  Eligibility criteria created: 95
+============================================================
+```
+
+### 6. Start the Service
 
 ```bash
 chmod +x start.sh
 ./start.sh
-# or: uvicorn app.main:app --host 0.0.0.0 --port 8003 --reload
+# or: python -m uvicorn app.main:app --host 0.0.0.0 --port 8003 --reload
 ```
 
-### 8. Verify Health
+### 7. Verify Health
 
 ```bash
 curl http://localhost:8003/health
@@ -280,8 +305,13 @@ Swagger docs are available at `http://localhost:8003/docs`.
 | `DB_USERNAME` | No | `root` | MySQL user |
 | `DB_PASSWORD` | Yes | — | MySQL password |
 | `DB_POOL_SIZE` | No | `10` | Max connections in pool |
-| **Inter-Service Auth** ||||
-| `X_SERVICE_TOKEN` | Yes | — | Shared secret for orchestrator calls |
+| **Inter-Service Auth (Internal JWT)** ||||
+| `INTERNAL_TOKEN_VERIFY_ENABLED` | No | `true` | Enable JWT verification |
+| `INTERNAL_TOKEN_SIGNING_ALGORITHM` | No | `RS256` | JWT signing algorithm |
+| `INTERNAL_TOKEN_PUBLIC_KEY` | No | — | RSA public key PEM (escape newlines as `\n`) |
+| `INTERNAL_TOKEN_JWKS_URL` | No | — | JWKS endpoint URL for key fetching |
+| `INTERNAL_TOKEN_AUDIENCE` | No | `ouroboros.scholarship-discovery` | Expected JWT audience claim |
+| `INTERNAL_TOKEN_ISSUER` | No | `ouroboros-orchestrator-internal` | Expected JWT issuer claim |
 | **LLM Configuration** ||||
 | `OPENAI_API_KEY` | No | — | OpenAI API key (primary) |
 | `OPENAI_MODEL` | No | `gpt-4o-mini` | OpenAI model |
@@ -357,7 +387,7 @@ migrations/
 
 **Base URL**: `http://localhost:8003`
 
-All endpoints except health checks require the `X-Service-Token` header.
+All endpoints except health checks require internal JWT authentication via `Authorization: Bearer <token>` header.
 
 ### Health
 
@@ -370,8 +400,8 @@ All endpoints except health checks require the `X-Service-Token` header.
 
 | Method | Path | Auth | Description |
 |--------|------|------|-------------|
-| POST | `/api/v1/scholarships/search` | X-Service-Token | Search and filter scholarships |
-| GET | `/api/v1/scholarships/{id}` | X-Service-Token | Get full scholarship details + criteria |
+| POST | `/api/v1/scholarships/search` | Bearer | Search and filter scholarships |
+| GET | `/api/v1/scholarships/{id}` | Bearer | Get full scholarship details + criteria |
 
 **POST `/api/v1/scholarships/search` — request body:**
 
@@ -405,23 +435,22 @@ All endpoints except health checks require the `X-Service-Token` header.
 
 | Method | Path | Auth | Description |
 |--------|------|------|-------------|
-| GET | `/api/v1/scholarships/by-program/{program_id}` | X-Service-Token | Get linked scholarships sorted by confidence |
-| POST | `/api/v1/scholarships/link` | X-Service-Token | Create/update a scholarship-program link |
+| GET | `/api/v1/scholarships/by-program/{program_id}` | Bearer | Get linked scholarships sorted by confidence |
+| POST | `/api/v1/scholarships/link` | Bearer | Create/update a scholarship-program link |
 
 ### Crawl Management
 
 | Method | Path | Auth | Description |
 |--------|------|------|-------------|
-| POST | `/api/v1/scholarships/crawl` | X-Service-Token | Trigger on-demand or batch crawl |
-| GET | `/api/v1/scholarships/crawl/{job_id}` | X-Service-Token | Get crawl job status |
-| GET | `/api/v1/scholarships/crawl` | X-Service-Token | List crawl jobs |
+| POST | `/api/v1/scholarships/crawl` | Bearer | Trigger on-demand or batch crawl |
+| GET | `/api/v1/scholarships/crawl/{job_id}` | Bearer | Get crawl job status |
+| GET | `/api/v1/scholarships/crawl` | Bearer | List crawl jobs |
 
 ### Error Responses
 
 | Status | Meaning |
 |--------|---------|
-| 401 | Missing `X-Service-Token` header |
-| 403 | Invalid `X-Service-Token` |
+| 401 | Missing or invalid `Authorization: Bearer` token |
 | 404 | Resource not found |
 | 422 | Validation error |
 | 502 | Upstream error (LLM, crawl failure) |
@@ -524,6 +553,53 @@ Macro-region labels for `region` criteria use the same country lists as geograph
 
 ---
 
+## Utility Scripts
+
+The `scripts/` directory contains utilities for database setup, data seeding, and maintenance:
+
+### Database & Setup
+
+| Script | Purpose |
+|--------|---------|
+| `run_migrations.py` | Creates database and runs SQL migrations (001-005) |
+| `seed_scholarship_sources.py` | Seeds global scholarships (CSC, Chevening, DAAD, Fulbright, etc.) |
+| `seed_nus_scholarships.py` | Seeds 35+ NUS scholarships with full eligibility criteria |
+
+### Data Import & Crawling
+
+| Script | Purpose |
+|--------|---------|
+| `trigger_batch_crawl.py` | Triggers a background batch crawl job (status via API) |
+| `import_spider_output.py` | Imports Scrapy JSON output into database |
+| `check_import_quality.py` | Validates import quality (detects mojibake, missing fields) |
+| `backfill_eligibility_criteria.py` | Extracts eligibility criteria from JSON using LLM |
+
+### Testing & Evaluation
+
+| Script | Purpose |
+|--------|---------|
+| `run_llm_eval.py` | Runs LLM-as-judge golden evaluations for extraction quality |
+
+### Example Usage
+
+```bash
+# Full setup sequence
+python scripts/run_migrations.py
+python scripts/seed_scholarship_sources.py
+python scripts/seed_nus_scholarships.py
+
+# Import crawled data (positional file argument)
+python scripts/import_spider_output.py crawl_output.json
+
+# Check data quality after import
+python scripts/check_import_quality.py
+
+# Backfill eligibility criteria using LLM
+python scripts/backfill_eligibility_criteria.py --limit 100
+```
+
+---
+
 ## Development Workflow
 
 ### Code Quality Checks
@@ -551,7 +627,7 @@ chmod +x pre-commit-check.sh
 ### Run All Tests
 
 ```bash
-ALLOW_DB_FAILURE=true USE_MOCK_DATA=true X_SERVICE_TOKEN=test-service-token pytest tests/ -v
+ALLOW_DB_FAILURE=true USE_MOCK_DATA=true INTERNAL_TOKEN_VERIFY_ENABLED=false pytest tests/ -v
 ```
 
 ### Run with Coverage
@@ -571,7 +647,7 @@ tests/
 │   ├── test_config.py                       # Configuration loading
 │   ├── test_health.py                       # Health check endpoints
 │   ├── test_main.py                         # FastAPI application
-│   ├── test_security.py                     # X-Service-Token validation
+│   ├── test_security.py                     # Internal JWT bearer validation
 │   ├── test_exceptions.py                   # Custom exception classes
 │   ├── test_models.py                       # Pydantic model validation
 │   ├── test_linking_service.py              # 4-dimension scoring logic
@@ -665,7 +741,7 @@ docker compose down -v
 ```bash
 docker compose up mysql -d
 source .venv/bin/activate
-uvicorn app.main:app --host 0.0.0.0 --port 8003 --reload
+python -m uvicorn app.main:app --host 0.0.0.0 --port 8003 --reload
 ```
 
 ### Port assignments (platform)
@@ -692,8 +768,7 @@ ouroboros-ai-scholarship-discovery/
 │   │   ├── linking.py                 # GET /by-program/{pid}, POST /link
 │   │   └── crawl.py                   # POST /crawl, GET /crawl/{id}
 │   ├── core/                           # Infrastructure
-│   │   ├── logging.py                 # structlog configuration
-│   │   └── security.py               # X-Service-Token validation
+│   │   └── logging.py                 # structlog configuration
 │   ├── crawlers/                       # Web crawling layer
 │   │   ├── scrapy/                    # Batch crawling
 │   │   │   ├── spiders/              # Scrapy spider classes
@@ -731,7 +806,7 @@ ouroboros-ai-scholarship-discovery/
 │   │   ├── llm_service.py           # LLM provider fallback
 │   │   └── scheduler_service.py     # APScheduler batch crawls
 │   ├── middleware/                      # HTTP middleware
-│   │   ├── service_auth.py          # X-Service-Token dependency
+│   │   ├── service_auth.py          # Internal JWT bearer validation
 │   │   └── logging_middleware.py    # Trace ID + latency logging
 │   ├── utils/                          # Utilities
 │   │   ├── exceptions.py            # Custom exception hierarchy
@@ -749,10 +824,14 @@ ouroboros-ai-scholarship-discovery/
 │   ├── eligibility_parsing_v1.json
 │   └── field_classification_v1.json
 ├── scripts/
-│   ├── run_migrations.py              # Execute migrations
-│   ├── seed_scholarship_sources.py    # Load top scholarship sources
-│   ├── generate_service_token.py      # Generate X_SERVICE_TOKEN
-│   └── trigger_batch_crawl.py         # Manual batch crawl
+│   ├── run_migrations.py              # Create DB + execute migrations
+│   ├── seed_scholarship_sources.py    # Seed global scholarships (Chevening, DAAD, etc.)
+│   ├── seed_nus_scholarships.py       # Seed 35+ NUS scholarships with eligibility
+│   ├── trigger_batch_crawl.py         # Trigger background crawl job
+│   ├── import_spider_output.py        # Import Scrapy JSON crawl output
+│   ├── check_import_quality.py        # Validate data quality (mojibake, etc.)
+│   ├── backfill_eligibility_criteria.py # Extract criteria from JSON via LLM
+│   └── run_llm_eval.py                # Run LLM-as-judge golden evaluations
 ├── tests/
 │   ├── unit/                           # Unit tests (14 files)
 │   └── integration/                    # Integration tests (2 files)
@@ -803,6 +882,43 @@ curl https://api.openai.com/v1/models -H "Authorization: Bearer $OPENAI_API_KEY"
 ```bash
 source .venv/bin/activate
 pip install -r requirements.txt
+```
+
+### Internal Auth Errors
+
+**Symptom**: `401 Unauthorized` on API calls
+
+```bash
+# Check if auth is enabled
+grep INTERNAL_TOKEN_VERIFY_ENABLED .env
+
+# For local development, disable auth:
+echo "INTERNAL_TOKEN_VERIFY_ENABLED=false" >> .env
+
+# For production, ensure public key matches orchestrator
+grep INTERNAL_TOKEN_PUBLIC_KEY .env
+```
+
+---
+
+## Integration with Orchestrator
+
+The orchestrator calls Scholarship Discovery Agent for:
+
+1. **Health Probes** — `GET /health`
+2. **Scholarship Search** — `POST /api/v1/scholarships/search`
+3. **Scholarship Details** — `GET /api/v1/scholarships/{id}`
+4. **Program-Linked Scholarships** — `GET /api/v1/scholarships/by-program/{program_id}`
+5. **Crawl Triggers** — `POST /api/v1/scholarships/crawl`
+
+### Audience Configuration
+
+```bash
+# In orchestrator .env
+INTERNAL_TOKEN_AUDIENCE_MAP={"scholarship-discovery":"ouroboros.scholarship-discovery",...}
+
+# In scholarship-discovery .env
+INTERNAL_TOKEN_AUDIENCE=ouroboros.scholarship-discovery
 ```
 
 ---

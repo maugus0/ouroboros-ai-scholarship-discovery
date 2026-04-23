@@ -1,19 +1,73 @@
-"""4-Dimension Scholarship-Program Linking Service.
+"""4-Dimension Scholarship-Program Linking Service with Explainability.
 
 Calculates confidence scores across university, field, degree, and geographic dimensions.
 Geographic scoring uses :func:`app.utils.region_mapping.entity_matches_region`.
+
+Now includes evidence strings for each dimension to support ReAct explainability.
 """
 
 import re
+from dataclasses import dataclass
 from typing import Any, Optional
 
 from app.config import settings
 from app.core.logging import get_logger
 from app.repositories.mysql_link_repo import LinkRepository
 from app.repositories.mysql_scholarship_repo import ScholarshipRepository
-from app.utils.region_mapping import entity_matches_region
+from app.utils.region_mapping import REGION_TO_COUNTRIES, entity_matches_region
 
 logger = get_logger(__name__)
+
+
+@dataclass
+class DimensionScore:
+    """Score with evidence for a single dimension."""
+
+    score: float
+    evidence: str
+
+    def to_dict(self) -> dict[str, Any]:
+        return {"score": round(self.score, 3), "evidence": self.evidence}
+
+
+@dataclass
+class LinkMatchResult:
+    """Complete match result with scores and evidence for all dimensions."""
+
+    university_score: DimensionScore
+    field_score: DimensionScore
+    degree_score: DimensionScore
+    geographic_score: DimensionScore
+    composite_score: float
+    link_type: str
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "university": self.university_score.to_dict(),
+            "field": self.field_score.to_dict(),
+            "degree": self.degree_score.to_dict(),
+            "geographic": self.geographic_score.to_dict(),
+            "composite_score": round(self.composite_score, 3),
+            "link_type": self.link_type,
+        }
+
+    def get_match_metadata(self) -> dict[str, float]:
+        """Get legacy match_metadata format for database storage."""
+        return {
+            "university_score": round(self.university_score.score, 3),
+            "field_score": round(self.field_score.score, 3),
+            "degree_score": round(self.degree_score.score, 3),
+            "geographic_score": round(self.geographic_score.score, 3),
+        }
+
+    def get_evidence_metadata(self) -> dict[str, str]:
+        """Get evidence strings for all dimensions."""
+        return {
+            "university_evidence": self.university_score.evidence,
+            "field_evidence": self.field_score.evidence,
+            "degree_evidence": self.degree_score.evidence,
+            "geographic_evidence": self.geographic_score.evidence,
+        }
 
 
 class LinkingService:
@@ -144,6 +198,257 @@ class LinkingService:
         )
 
         return link
+
+    async def calculate_link_with_evidence(
+        self,
+        scholarship_id: str,
+        program_metadata: dict[str, Any],
+    ) -> Optional[LinkMatchResult]:
+        """Calculate 4-dimension confidence score with evidence strings.
+
+        This method returns full evidence for explainability without storing the link.
+
+        Args:
+            scholarship_id: Scholarship ID to match
+            program_metadata: Program data (university_name, field, degree_type, country)
+
+        Returns:
+            LinkMatchResult with scores and evidence for all dimensions, or None if scholarship not found
+        """
+        scholarship = await self.scholarship_repo.get_by_id(scholarship_id)
+        if not scholarship:
+            logger.warning("scholarship_not_found", scholarship_id=scholarship_id)
+            return None
+
+        university_result = self._calc_university_match_with_evidence(scholarship, program_metadata)
+        field_result = self._calc_field_match_with_evidence(scholarship, program_metadata)
+        degree_result = self._calc_degree_match_with_evidence(scholarship, program_metadata)
+        geographic_result = self._calc_geographic_match_with_evidence(scholarship, program_metadata)
+
+        composite = self._calculate_composite_confidence(
+            university_score=university_result.score,
+            field_score=field_result.score,
+            degree_score=degree_result.score,
+            geographic_score=geographic_result.score,
+        )
+
+        link_type = self._determine_link_type(
+            university_result.score,
+            field_result.score,
+            degree_result.score,
+            geographic_result.score,
+        )
+
+        return LinkMatchResult(
+            university_score=university_result,
+            field_score=field_result,
+            degree_score=degree_result,
+            geographic_score=geographic_result,
+            composite_score=composite,
+            link_type=link_type,
+        )
+
+    def _calc_university_match_with_evidence(
+        self,
+        scholarship: dict[str, Any],
+        program_metadata: dict[str, Any],
+    ) -> DimensionScore:
+        """Calculate university match with evidence string."""
+        university = program_metadata.get("university_name", "")
+        provider = scholarship.get("provider", "")
+        scholarship_name = scholarship.get("name", "")
+
+        if not university:
+            return DimensionScore(0.0, "University not specified in program metadata")
+
+        normalized_university = self._normalize_text(university)
+        university_tokens = normalized_university.split()
+        university_acronym = self._acronym(university_tokens)
+
+        candidates = [(provider, "provider"), (scholarship_name, "scholarship name")]
+
+        for candidate, source in candidates:
+            normalized_candidate = self._normalize_text(candidate)
+            if not normalized_candidate:
+                continue
+
+            if normalized_candidate == normalized_university:
+                return DimensionScore(
+                    1.0, f"Perfect match: Program at '{university}', scholarship {source} is '{candidate}'"
+                )
+
+            if normalized_candidate in normalized_university or normalized_university in normalized_candidate:
+                score = 1.0 if source == "provider" else 0.85
+                return DimensionScore(
+                    score, f"Substring match: Program's '{university}' matches scholarship {source} '{candidate}'"
+                )
+
+            candidate_tokens = normalized_candidate.split()
+
+            if (
+                len(candidate_tokens) == 1
+                and len(candidate_tokens[0]) <= 8
+                and candidate_tokens[0] == university_acronym
+            ):
+                return DimensionScore(
+                    1.0,
+                    f"Acronym match: Program at '{university}' ({university_acronym}) matches {source} '{candidate}'",
+                )
+
+            if len(university_tokens) == 1 and len(university_tokens[0]) <= 8:
+                candidate_acronym = self._acronym(candidate_tokens)
+                if university_tokens[0] == candidate_acronym:
+                    return DimensionScore(
+                        1.0, f"Acronym match: Program at '{university}' matches {source} acronym ({candidate_acronym})"
+                    )
+
+            overlap = set(candidate_tokens) & set(university_tokens)
+            if len(overlap) >= 2:
+                score = 0.9 if source == "provider" else 0.75
+                return DimensionScore(
+                    score, f"Partial match: '{university}' shares keywords with {source} '{candidate}'"
+                )
+
+        return DimensionScore(0.0, f"No match: Program at '{university}', scholarship provider is '{provider}'")
+
+    def _calc_field_match_with_evidence(
+        self,
+        scholarship: dict[str, Any],
+        program_metadata: dict[str, Any],
+    ) -> DimensionScore:
+        """Calculate field match with evidence string."""
+        scholarship_fields = self._criterion_values(scholarship, "field_of_study")
+
+        if not scholarship_fields:
+            return DimensionScore(1.0, "Scholarship open to all fields of study")
+
+        program_field = program_metadata.get("field", "")
+        normalized_program = self._normalize_text(program_field)
+
+        if not normalized_program:
+            return DimensionScore(0.5, f"Field not specified; scholarship targets: {', '.join(scholarship_fields)}")
+
+        program_keywords = set(normalized_program.split())
+        best_score = 0.0
+        best_evidence = ""
+
+        for field in scholarship_fields:
+            normalized_field = self._normalize_text(field)
+            if not normalized_field:
+                continue
+
+            if normalized_field == normalized_program:
+                return DimensionScore(
+                    1.0, f"Perfect field match: Program's '{program_field}' exactly matches '{field}'"
+                )
+
+            if normalized_field in normalized_program or normalized_program in normalized_field:
+                if 0.9 > best_score:
+                    best_score = 0.9
+                    best_evidence = f"Strong field match: Program's '{program_field}' aligns with '{field}'"
+                continue
+
+            scholarship_keywords = set(normalized_field.split())
+            overlap = scholarship_keywords & program_keywords
+            union = scholarship_keywords | program_keywords
+            if union:
+                jaccard = len(overlap) / len(union)
+                if jaccard > best_score:
+                    best_score = jaccard
+                    best_evidence = f"Keyword overlap: Program's '{program_field}' shares terms with '{field}'"
+
+        if best_score > 0:
+            return DimensionScore(best_score, best_evidence)
+
+        return DimensionScore(0.0, f"No match: Program's '{program_field}' doesn't match scholarship fields")
+
+    def _calc_degree_match_with_evidence(
+        self,
+        scholarship: dict[str, Any],
+        program_metadata: dict[str, Any],
+    ) -> DimensionScore:
+        """Calculate degree match with evidence string."""
+        scholarship_degrees = self._criterion_values(scholarship, "degree_level")
+
+        if not scholarship_degrees:
+            return DimensionScore(1.0, "Scholarship open to all degree levels")
+
+        program_degree = program_metadata.get("degree_type", "")
+
+        if not program_degree:
+            return DimensionScore(0.5, f"Degree not specified; scholarship targets: {', '.join(scholarship_degrees)}")
+
+        degree_map = {
+            "bachelor": "bachelor",
+            "undergraduate": "bachelor",
+            "bsc": "bachelor",
+            "ba": "bachelor",
+            "master": "master",
+            "masters": "master",
+            "ms": "master",
+            "msc": "master",
+            "ma": "master",
+            "phd": "phd",
+            "postdoc": "phd",
+            "postdoctoral": "phd",
+            "doctoral": "phd",
+            "doctorate": "phd",
+        }
+
+        program_key = self._normalize_text(program_degree)
+        normalized_program = degree_map.get(program_degree.lower(), degree_map.get(program_key, program_key))
+        normalized_scholarship = [
+            degree_map.get(self._normalize_text(d), self._normalize_text(d)) for d in scholarship_degrees
+        ]
+
+        if normalized_program in normalized_scholarship:
+            return DimensionScore(1.0, f"Perfect degree match: Program's '{program_degree}' matches eligible levels")
+
+        return DimensionScore(
+            0.0,
+            f"Degree mismatch: Program's '{program_degree}' not in eligible levels: {', '.join(scholarship_degrees)}",
+        )
+
+    def _calc_geographic_match_with_evidence(
+        self,
+        scholarship: dict[str, Any],
+        program_metadata: dict[str, Any],
+    ) -> DimensionScore:
+        """Calculate geographic match with evidence string."""
+        scholarship_regions = self._criterion_values(scholarship, "region")
+        scholarship_nationalities = self._criterion_values(scholarship, "nationality")
+
+        if not scholarship_regions and not scholarship_nationalities:
+            return DimensionScore(1.0, "Scholarship open to all regions/nationalities")
+
+        program_country = program_metadata.get("country", "")
+
+        if not program_country:
+            restrictions = scholarship_regions + scholarship_nationalities
+            return DimensionScore(0.5, f"Country not specified; scholarship targets: {', '.join(restrictions)}")
+
+        for region in scholarship_regions:
+            if entity_matches_region(program_country, region):
+                countries = REGION_TO_COUNTRIES.get(region.lower())
+                if countries:
+                    return DimensionScore(
+                        1.0, f"Regional match: Program country '{program_country}' is in eligible region '{region}'"
+                    )
+                return DimensionScore(1.0, f"Geographic match: Program country '{program_country}' matches '{region}'")
+
+        normalized_country = self._normalize_text(program_country)
+        for nationality in scholarship_nationalities:
+            if normalized_country == self._normalize_text(nationality):
+                return DimensionScore(1.0, f"Country match: Program country '{program_country}' is explicitly eligible")
+            if entity_matches_region(program_country, nationality):
+                return DimensionScore(
+                    1.0, f"Country/region match: Program country '{program_country}' matches '{nationality}'"
+                )
+
+        restrictions = scholarship_regions + scholarship_nationalities
+        return DimensionScore(
+            0.0, f"Geographic restriction: Program country '{program_country}' not in eligible regions"
+        )
 
     @staticmethod
     def _calc_university_match(scholarship: dict[str, Any], program_metadata: dict[str, Any]) -> float:
