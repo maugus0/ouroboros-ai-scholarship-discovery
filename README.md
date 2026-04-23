@@ -278,7 +278,7 @@ NUS Scholarship Seeding Complete!
 ```bash
 chmod +x start.sh
 ./start.sh
-# or: uvicorn app.main:app --host 0.0.0.0 --port 8003 --reload
+# or: python -m uvicorn app.main:app --host 0.0.0.0 --port 8003 --reload
 ```
 
 ### 7. Verify Health
@@ -741,7 +741,7 @@ docker compose down -v
 ```bash
 docker compose up mysql -d
 source .venv/bin/activate
-uvicorn app.main:app --host 0.0.0.0 --port 8003 --reload
+python -m uvicorn app.main:app --host 0.0.0.0 --port 8003 --reload
 ```
 
 ### Port assignments (platform)
