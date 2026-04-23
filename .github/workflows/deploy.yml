@@ -7,6 +7,7 @@
 #   actions/checkout@v6 — https://github.com/actions/checkout/releases
 #   actions/setup-python@v6 — https://github.com/actions/setup-python/releases
 #   actions/upload-artifact@v6 — https://github.com/actions/upload-artifact/releases
+#   actions/github-script@v8 — https://github.com/actions/github-script/releases
 #   docker/setup-buildx-action@v4 — https://github.com/docker/setup-buildx-action/releases
 #   docker/build-push-action@v7 — https://github.com/docker/build-push-action/releases
 #
@@ -92,6 +93,28 @@ jobs:
       - name: Run pylint
         run: pylint app/ tests/ --max-line-length=120 --disable=C0111,R0903
 
+  prompt-lint:
+    name: Prompt Linting
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+          cache-dependency-path: requirements-dev.txt
+
+      - name: Install dev dependencies
+        run: |
+          pip install --upgrade pip
+          pip install -r requirements-dev.txt
+
+      - name: Run prompt lint tests
+        run: pytest tests/unit/test_prompt_lint.py -v --tb=short
+
   unit-tests:
     name: Unit Tests
     runs-on: ubuntu-latest
@@ -130,6 +153,94 @@ jobs:
           path: junit-report.xml
           retention-days: 7
 
+  prompt-diff-alert:
+    name: Prompt Diff Alert
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+      issues: write
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Detect prompt changes
+        id: prompt_changes
+        shell: bash
+        run: |
+          git fetch origin "${{ github.base_ref }}" --depth=1
+
+          changed_files="$(git diff --name-only "origin/${{ github.base_ref }}"...HEAD -- 'prompts/**/*.json' 'prompts/*.json' || true)"
+
+          if [ -n "$changed_files" ]; then
+            {
+              echo "changed=true"
+              echo "files<<EOF"
+              echo "$changed_files"
+              echo "EOF"
+            } >> "$GITHUB_OUTPUT"
+          else
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Comment on PR when prompts change
+        if: steps.prompt_changes.outputs.changed == 'true' && github.event.pull_request.head.repo.full_name == github.repository
+        continue-on-error: true
+        uses: actions/github-script@v8
+        with:
+          script: |
+            const rawFiles = ${{ toJson(steps.prompt_changes.outputs.files) }};
+            const files = rawFiles
+              .split('\n')
+              .filter(Boolean)
+              .map((file) => `- \`${file}\``)
+              .join('\n');
+
+            const marker = '<!-- prompt-diff-alert -->';
+            const body = [
+              marker,
+              '## Prompt files changed',
+              '',
+              'This PR modifies prompt templates:',
+              '',
+              files,
+              '',
+              'Please review prompt behavior carefully and consider whether golden eval fixtures or baseline scores should be updated.',
+            ].join('\n');
+
+            const { owner, repo } = context.repo;
+            const issue_number = context.issue.number;
+
+            const comments = await github.rest.issues.listComments({
+              owner,
+              repo,
+              issue_number,
+              per_page: 100,
+            });
+
+            const existing = comments.data.find((comment) =>
+              comment.body && comment.body.includes(marker)
+            );
+
+            if (existing) {
+              await github.rest.issues.updateComment({
+                owner,
+                repo,
+                comment_id: existing.id,
+                body,
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner,
+                repo,
+                issue_number,
+                body,
+              });
+            }
+
   # ---------------------------------------------------------------------------
   # Stage 2: Type check, coverage, static + dependency security (parallel)
   # Requires Stage 1 (format, lint, unit-tests).
@@ -137,7 +248,7 @@ jobs:
   type-check:
     name: Type Checking (mypy)
     runs-on: ubuntu-latest
-    needs: [format, lint, unit-tests]
+    needs: [format, lint, prompt-lint, unit-tests]
     steps:
       - name: Checkout code
         uses: actions/checkout@v6
@@ -160,7 +271,7 @@ jobs:
   integration-tests:
     name: Tests with Coverage
     runs-on: ubuntu-latest
-    needs: [format, lint, unit-tests]
+    needs: [format, lint, prompt-lint, unit-tests]
     steps:
       - name: Checkout code
         uses: actions/checkout@v6
@@ -205,10 +316,50 @@ jobs:
           path: coverage.xml
           retention-days: 7
 
+  llm-eval:
+    name: LLM-as-Judge Evaluation
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    needs:
+      - type-check
+      - integration-tests
+      - prompt-lint
+    env:
+      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+      LLM_EVAL_MODEL: gpt-4o-mini
+      LLM_EVAL_BASELINE_SCORE: ${{ vars.LLM_EVAL_BASELINE_SCORE || '8.0' }}
+      LLM_EVAL_ALLOWED_DROP: "0.5"
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+          cache-dependency-path: requirements-dev.txt
+
+      - name: Install dependencies
+        run: |
+          pip install --upgrade pip
+          pip install -r requirements.txt -r requirements-dev.txt
+
+      - name: Run LLM-as-Judge evaluation
+        run: python scripts/run_llm_eval.py
+
+      - name: Upload eval results
+        if: always() && hashFiles('eval_results.json') != ''
+        uses: actions/upload-artifact@v6
+        with:
+          name: eval-results
+          path: eval_results.json
+          retention-days: 30
+
   security-static:
     name: Security Scan (Bandit)
     runs-on: ubuntu-latest
-    needs: [format, lint, unit-tests]
+    needs: [format, lint, prompt-lint, unit-tests]
     steps:
       - name: Checkout code
         uses: actions/checkout@v6
@@ -239,7 +390,7 @@ jobs:
   security-scan:
     name: Security Scan (Snyk OSS)
     runs-on: ubuntu-latest
-    needs: [format, lint, unit-tests]
+    needs: [format, lint, prompt-lint, unit-tests]
     env:
       SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
     permissions:
@@ -390,9 +541,11 @@ jobs:
     needs:
       - format
       - lint
+      - prompt-lint
       - unit-tests
       - type-check
       - integration-tests
+      - llm-eval
       - security-static
       - security-scan
       - docker-build
@@ -413,9 +566,11 @@ jobs:
             echo "## Job results";
             echo "- Code Formatting: ${{ needs.format.result }}";
             echo "- Lint & Code Quality: ${{ needs.lint.result }}";
+            echo "- Prompt Linting: ${{ needs.prompt-lint.result }}";
             echo "- Unit Tests: ${{ needs.unit-tests.result }}";
             echo "- Type Checking (mypy): ${{ needs.type-check.result }}";
             echo "- Tests with Coverage: ${{ needs.integration-tests.result }}";
+            echo "- LLM-as-Judge Evaluation: ${{ needs.llm-eval.result }}";
             echo "- Security Scan (Bandit): ${{ needs.security-static.result }}";
             echo "- Security Scan (Snyk OSS): ${{ needs.security-scan.result }}";
             echo "- Docker Build/Push: ${{ needs.docker-build.result }}";

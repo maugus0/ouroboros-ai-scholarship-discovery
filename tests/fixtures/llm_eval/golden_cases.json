@@ -1,0 +1,214 @@
+{
+  "version": 1,
+  "task": "scholarship_discovery_quality_eval",
+  "description": "Golden evaluation cases for scholarship extraction fields that feed downstream matching, eligibility filtering, and ranking.",
+  "scoring_scale": {
+    "min": 0,
+    "max": 10,
+    "passing_score": 8
+  },
+  "cases": [
+    {
+      "id": "case_1_daad_extraction_for_matching",
+      "type": "extraction",
+      "description": "Extract DAAD scholarship funding, deadline, and eligibility fields used for program matching.",
+      "input_text": "DAAD Research Grant for international students. The scholarship provides a monthly stipend of EUR 1,200. The application deadline is October 31, 2026. Open to master's students in engineering from Asia.",
+      "source_url": "https://www.daad.de",
+      "expected_json": {
+        "name": "DAAD Research Grant",
+        "provider": "DAAD",
+        "funding_amount": 1200,
+        "currency": "EUR",
+        "deadline": "2026-10-31",
+        "eligibility_criteria": {
+          "degree_level": ["master"],
+          "field_of_study": ["engineering"],
+          "region": ["Asia"]
+        }
+      },
+      "quality_dimensions": [
+        "funding_extraction",
+        "deadline_normalization",
+        "degree_level_extraction",
+        "field_extraction",
+        "region_extraction"
+      ],
+      "rubric": [
+        "Extract the scholarship name as DAAD Research Grant",
+        "Extract the provider as DAAD",
+        "Extract the stipend amount as 1200 and currency as EUR",
+        "Normalize the deadline to 2026-10-31",
+        "Extract degree level as master",
+        "Extract field of study as engineering",
+        "Extract region as Asia",
+        "Do not invent fields that are not present in the input"
+      ]
+    },
+    {
+      "id": "case_2_chevening_eligibility_extraction",
+      "type": "extraction",
+      "description": "Extract Chevening scholarship eligibility criteria used for mandatory filtering.",
+      "input_text": "Chevening Science Fellowship 2026 is a fully funded one-year award for applicants pursuing a master's degree in science or public policy. The application deadline is November 5, 2026. Applicants must have a minimum GPA of 3.5 and must be citizens of India, China, or Malaysia.",
+      "source_url": "https://www.chevening.org",
+      "expected_json": {
+        "name": "Chevening Science Fellowship 2026",
+        "provider": "Chevening",
+        "funding_amount": null,
+        "currency": null,
+        "deadline": "2026-11-05",
+        "eligibility_criteria": {
+          "min_gpa": 3.5,
+          "nationality": ["India", "China", "Malaysia"],
+          "field_of_study": ["science", "public policy"],
+          "degree_level": ["master"]
+        }
+      },
+      "quality_dimensions": [
+        "deadline_normalization",
+        "gpa_threshold_extraction",
+        "nationality_extraction",
+        "field_extraction",
+        "degree_level_extraction"
+      ],
+      "rubric": [
+        "Extract the scholarship name as Chevening Science Fellowship 2026",
+        "Extract the provider as Chevening",
+        "Normalize the deadline to 2026-11-05",
+        "Extract minimum GPA as 3.5",
+        "Extract allowed nationalities as India, China, and Malaysia",
+        "Extract degree level as master",
+        "Extract eligible fields as science and public policy",
+        "Represent fully funded without inventing a numeric funding amount"
+      ]
+    },
+    {
+      "id": "case_3_csc_currency_and_region_extraction",
+      "type": "extraction",
+      "description": "Extract CSC scholarship currency, deadline, and regional eligibility fields.",
+      "input_text": "China Scholarship Council (CSC) Excellence Award. Funding value is 30,000 USD annually. Please submit applications before 2026-03-31. Eligible applicants are doctoral students from African countries working in health sciences.",
+      "source_url": "https://www.csc.edu.cn",
+      "expected_json": {
+        "name": "China Scholarship Council (CSC) Excellence Award",
+        "provider": "China Scholarship Council",
+        "funding_amount": 30000,
+        "currency": "USD",
+        "deadline": "2026-03-31",
+        "eligibility_criteria": {
+          "region": ["Africa"],
+          "field_of_study": ["health sciences"],
+          "degree_level": ["phd"]
+        }
+      },
+      "quality_dimensions": [
+        "funding_extraction",
+        "currency_extraction",
+        "deadline_normalization",
+        "region_extraction",
+        "field_extraction",
+        "degree_level_extraction"
+      ],
+      "rubric": [
+        "Extract the scholarship name as China Scholarship Council (CSC) Excellence Award",
+        "Extract the provider as China Scholarship Council",
+        "Extract funding amount as 30000 and currency as USD",
+        "Normalize the deadline to 2026-03-31",
+        "Extract region as Africa from African countries",
+        "Extract field of study as health sciences",
+        "Extract doctoral students as phd degree level",
+        "Do not convert the annual amount to another currency"
+      ]
+    },
+    {
+      "id": "case_4_nus_program_linking_fields",
+      "type": "extraction",
+      "description": "Extract university, field, degree, and geography signals needed for scholarship-program linking.",
+      "input_text": "National University of Singapore Graduate Computing Scholarship. This award is offered by NUS School of Computing for students admitted to master's programmes in Computer Science, Artificial Intelligence, or Information Systems. Applicants may be from any country in Southeast Asia. Deadline: July 15, 2026.",
+      "source_url": "https://www.nus.edu.sg",
+      "expected_json": {
+        "name": "National University of Singapore Graduate Computing Scholarship",
+        "provider": "National University of Singapore",
+        "deadline": "2026-07-15",
+        "eligibility_criteria": {
+          "region": ["Southeast Asia"],
+          "field_of_study": ["Computer Science", "Artificial Intelligence", "Information Systems"],
+          "degree_level": ["master"]
+        }
+      },
+      "quality_dimensions": [
+        "provider_extraction",
+        "deadline_normalization",
+        "field_extraction",
+        "degree_level_extraction",
+        "geography_extraction"
+      ],
+      "rubric": [
+        "Extract provider as National University of Singapore rather than only NUS School of Computing",
+        "Normalize the deadline to 2026-07-15",
+        "Extract degree level as master",
+        "Extract Computer Science, Artificial Intelligence, and Information Systems as eligible fields",
+        "Extract Southeast Asia as the geographic eligibility region",
+        "Do not infer a funding amount because none is stated"
+      ]
+    },
+    {
+      "id": "case_5_optional_preference_vs_mandatory",
+      "type": "extraction",
+      "description": "Distinguish mandatory eligibility criteria from optional preferences for downstream filtering and ranking.",
+      "input_text": "Global Women in STEM Award 2026. Applicants must be women pursuing a bachelor's degree in engineering or mathematics and must have a minimum GPA of 3.2. Preference is given to applicants from Latin America, but students from all countries may apply. The award amount is USD 5,000. Applications close on September 1, 2026.",
+      "source_url": "https://example.org/global-women-stem-award",
+      "expected_json": {
+        "name": "Global Women in STEM Award 2026",
+        "provider": null,
+        "funding_amount": 5000,
+        "currency": "USD",
+        "deadline": "2026-09-01",
+        "eligibility_criteria": {
+          "min_gpa": 3.2,
+          "field_of_study": ["engineering", "mathematics"],
+          "degree_level": ["bachelor"],
+          "nationality": null,
+          "region": null,
+          "parsed_criteria": [
+            {
+              "type": "field_of_study",
+              "value": "engineering, mathematics",
+              "is_mandatory": true
+            },
+            {
+              "type": "degree_level",
+              "value": "bachelor",
+              "is_mandatory": true
+            },
+            {
+              "type": "min_gpa",
+              "value": "3.2",
+              "is_mandatory": true
+            },
+            {
+              "type": "region",
+              "value": "Latin America",
+              "is_mandatory": false
+            }
+          ]
+        }
+      },
+      "quality_dimensions": [
+        "mandatory_criteria_extraction",
+        "optional_preference_extraction",
+        "gpa_threshold_extraction",
+        "funding_extraction",
+        "deadline_normalization"
+      ],
+      "rubric": [
+        "Extract the scholarship name as Global Women in STEM Award 2026",
+        "Extract funding amount as 5000 and currency as USD",
+        "Normalize the deadline to 2026-09-01",
+        "Extract minimum GPA as 3.2",
+        "Extract bachelor's degree as a mandatory degree-level criterion",
+        "Extract engineering and mathematics as mandatory field criteria",
+        "Treat Latin America as an optional preference, not a mandatory exclusion",
+        "Do not restrict nationality or region for all applicants because the text says students from all countries may apply"
+      ]
+    }
+  ]
+}
