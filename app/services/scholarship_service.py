@@ -75,9 +75,21 @@ class ScholarshipService:
         Returns:
             Dict with scholarships, total, page, page_size, and agent_reasoning
         """
+        # Only filter by program_ids if no provider is specified
+        # When provider is specified, we search by provider directly
+        # program_ids filter requires scholarship_program_links which may not exist
         scholarship_ids: list[str] | None = None
-        if program_ids:
+        if program_ids and not provider:
             scholarship_ids = await self.link_repo.get_scholarship_ids_for_programs(program_ids)
+            # If no scholarships are linked to the given programs, return empty result early
+            if not scholarship_ids:
+                return {
+                    "scholarships": [],
+                    "total": 0,
+                    "page": page,
+                    "page_size": limit,
+                    "agent_reasoning": None,
+                }
 
         all_scholarships = await self.scholarship_repo.search_scholarships(
             provider=provider,
@@ -97,12 +109,25 @@ class ScholarshipService:
                 scholarship_ids=scholarship_ids,
             )
 
+            # Always provide agent reasoning even without profile matching
+            agent_reasoning = {
+                "approach": "Retrieved scholarships without profile-based matching.",
+                "confidence": 0.70,
+                "decision_factors": [
+                    f"Total scholarships found: {total}",
+                    f"Provider filter: {provider or 'None'}",
+                    "No student profile provided for eligibility matching",
+                    "Results ordered by deadline",
+                ],
+                "eligibility_summary": "Profile-based eligibility not evaluated (no profile provided)",
+            }
+
             return {
                 "scholarships": paginated,
                 "total": total,
                 "page": page,
                 "page_size": limit,
-                "agent_reasoning": None,
+                "agent_reasoning": agent_reasoning,
             }
 
         criteria_by_scholarship = await self._load_criteria_for_scholarships(all_scholarships)

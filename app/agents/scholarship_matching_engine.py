@@ -286,14 +286,26 @@ class ScholarshipMatchingEngine:
             if r.scholarship_id in decision_trace:
                 decision_trace[r.scholarship_id].rank = i
 
-        ranked_scholarships = recommended + considered
+        # Include filtered_out scholarships (ineligible or low score) at the end
+        # so users can see all options with their eligibility status
+        filtered_out = [r for r in results if r.decision == DECISION_FILTER_OUT]
+        filtered_out.sort(key=lambda x: x.composite_score, reverse=True)
+        offset = len(recommended) + len(considered)
+        for i, r in enumerate(filtered_out, offset + 1):
+            r.rank = i
+            if r.scholarship_id in decision_trace:
+                decision_trace[r.scholarship_id].rank = i
+
+        # Return ALL scholarships: eligible first, then ineligible
+        ranked_scholarships = recommended + considered + filtered_out
 
         filters_applied.append(f"Fully eligible: {fully_eligible}")
         filters_applied.append(f"Partially eligible (missing info): {partially_eligible}")
-        filters_applied.append(f"Ineligible: {ineligible}")
-        filters_applied.append(f"Filtered by low match score: {filtered_by_score}")
+        filters_applied.append(f"Ineligible (still shown): {ineligible}")
+        filters_applied.append(f"Low match score: {filtered_by_score}")
         filters_applied.append(f"Recommended (score >= {RECOMMEND_THRESHOLD}): {len(recommended)}")
         filters_applied.append(f"Considered (score >= {CONSIDER_THRESHOLD}): {len(considered)}")
+        filters_applied.append(f"Ineligible/filtered (shown last): {len(filtered_out)}")
 
         return ReactMatchingResult(
             react_decision_trace=decision_trace,
