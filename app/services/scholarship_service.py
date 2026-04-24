@@ -119,7 +119,13 @@ class ScholarshipService:
                     "No student profile provided for eligibility matching",
                     "Results ordered by deadline",
                 ],
-                "eligibility_summary": "Profile-based eligibility not evaluated (no profile provided)",
+                "eligibility_summary": {
+                    "total_scholarships_evaluated": 0,
+                    "fully_eligible": 0,
+                    "partially_eligible": 0,
+                    "ineligible": 0,
+                    "note": "Profile-based eligibility not evaluated (no profile provided)",
+                },
             }
 
             return {
