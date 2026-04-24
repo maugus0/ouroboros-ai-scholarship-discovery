@@ -273,6 +273,80 @@ NUS Scholarship Seeding Complete!
 ============================================================
 ```
 
+### 5b. Seed Singapore Graduate Scholarships (Recommended)
+
+Seed additional graduate scholarships from Singapore universities and government:
+
+```bash
+# Seed Singapore graduate scholarships (SINGA, A*STAR, NTU, SMU, SUTD fellowships)
+python scripts/seed_singapore_graduate_scholarships.py
+```
+
+This seeds **12 scholarships** including:
+- **Government**: SINGA (Singapore International Graduate Award), A*STAR Graduate Scholarship
+- **NUS**: NUS Research Scholarship, NUS Graduate School Scholarship
+- **NTU**: Nanyang President's Graduate Scholarship, NTU Research Scholarship, NTU-CCDS Graduate Scholarship
+- **SMU**: SMU Graduate Scholarship, Lee Kong Chian Graduate Scholarship
+- **SUTD**: SUTD PhD President's Graduate Fellowship, SUTD PhD Fellowship, SUTD MEng Research Fellowship
+
+Expected output:
+
+```
+Seeding Singapore Graduate Scholarships...
+  + Seeded: Singapore International Graduate Award (SINGA)
+  + Seeded: A*STAR Graduate Scholarship
+  + Seeded: NUS Research Scholarship
+  ...
+✓ Seeded 12 scholarships with 0 eligibility criteria
+```
+
+### 5c. Link Scholarships to Programs (Required for Workflow)
+
+Link scholarships to programs based on field matching and eligibility criteria:
+
+```bash
+# Link scholarships to programs (requires Program Discovery database to be seeded)
+python scripts/link_scholarships_to_programs.py
+
+# View link summary only
+python scripts/link_scholarships_to_programs.py --summary
+```
+
+This script:
+1. Fetches all programs from Program Discovery database
+2. Fetches all scholarships from Scholarship Discovery database
+3. Creates links based on field of study match, degree level match, and provider match
+
+Expected output:
+
+```
+Found 53 programs in Singapore
+Found 16 scholarships
+
+Creating scholarship-program links...
+------------------------------------------------------------
+  Master of Computing in Computer Science              -> 14 scholarships
+  Master of Science in Data Science                    -> 14 scholarships
+  ...
+------------------------------------------------------------
+
+✓ Created 744 new links
+✓ Updated 0 existing links
+✓ Total: 744 scholarship-program links
+
+=== Link Summary ===
+Total links: 744
+Unique scholarships linked: 16
+Unique programs linked: 53
+Average confidence score: 0.64
+```
+
+> **Important**: Run this script after seeding both:
+> - Programs in `ouroboros-ai-program-discovery` (run `seed_singapore_cs_programs.py`)
+> - Scholarships in this repository (run `seed_singapore_graduate_scholarships.py`)
+>
+> Without program-scholarship links, the scholarship search will return 0 results when filtering by programs.
+
 ### 6. Start the Service
 
 ```bash
@@ -564,6 +638,8 @@ The `scripts/` directory contains utilities for database setup, data seeding, an
 | `run_migrations.py` | Creates database and runs SQL migrations (001-005) |
 | `seed_scholarship_sources.py` | Seeds global scholarships (CSC, Chevening, DAAD, Fulbright, etc.) |
 | `seed_nus_scholarships.py` | Seeds 35+ NUS scholarships with full eligibility criteria |
+| `seed_singapore_graduate_scholarships.py` | Seeds 12 Singapore graduate scholarships (SINGA, A*STAR, NTU, SMU, SUTD) |
+| `link_scholarships_to_programs.py` | Links scholarships to programs by field/eligibility matching |
 
 ### Data Import & Crawling
 
@@ -587,6 +663,13 @@ The `scripts/` directory contains utilities for database setup, data seeding, an
 python scripts/run_migrations.py
 python scripts/seed_scholarship_sources.py
 python scripts/seed_nus_scholarships.py
+python scripts/seed_singapore_graduate_scholarships.py
+
+# Link scholarships to programs (run after Program Discovery is seeded)
+python scripts/link_scholarships_to_programs.py
+
+# View link summary only
+python scripts/link_scholarships_to_programs.py --summary
 
 # Import crawled data (positional file argument)
 python scripts/import_spider_output.py crawl_output.json
@@ -827,6 +910,8 @@ ouroboros-ai-scholarship-discovery/
 │   ├── run_migrations.py              # Create DB + execute migrations
 │   ├── seed_scholarship_sources.py    # Seed global scholarships (Chevening, DAAD, etc.)
 │   ├── seed_nus_scholarships.py       # Seed 35+ NUS scholarships with eligibility
+│   ├── seed_singapore_graduate_scholarships.py  # Seed Singapore graduate scholarships (SINGA, A*STAR, NTU, SMU, SUTD)
+│   ├── link_scholarships_to_programs.py  # Link scholarships to programs by field/eligibility
 │   ├── trigger_batch_crawl.py         # Trigger background crawl job
 │   ├── import_spider_output.py        # Import Scrapy JSON crawl output
 │   ├── check_import_quality.py        # Validate data quality (mojibake, etc.)
