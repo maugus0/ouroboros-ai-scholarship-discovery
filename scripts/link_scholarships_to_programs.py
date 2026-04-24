@@ -19,7 +19,7 @@ import json
 import os
 import sys
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 
 import mysql.connector
@@ -269,7 +269,7 @@ def link_scholarships_to_programs():
                     "program_field": program.get("field"),
                     "program_degree": program.get("degree_type"),
                     "scholarship_provider": scholarship.get("provider"),
-                    "matched_at": datetime.utcnow().isoformat(),
+                    "matched_at": datetime.now(timezone.utc).isoformat(),
                 }
                 
                 try:

@@ -15,7 +15,7 @@ Usage:
 
 import sys
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 
 import mysql.connector
@@ -319,35 +319,48 @@ def seed_scholarships():
                     scholarship["description"],
                     scholarship["source_url"],
                     True,
-                    datetime.utcnow(),
+                    datetime.now(timezone.utc),
                 ),
             )
+            conn.commit()
+
+            # Get the actual scholarship ID (in case ON DUPLICATE KEY UPDATE was triggered)
+            cursor.execute(
+                "SELECT id FROM scholarships WHERE source_url = %s",
+                (scholarship["source_url"],),
+            )
+            result = cursor.fetchone()
+            actual_sid = result[0] if result else scholarship_id
 
             if cursor.rowcount > 0:
                 scholarships_created += 1
                 print(f"  + Seeded: {scholarship['name']}")
-
-                for criteria in eligibility_criteria:
-                    try:
-                        cursor.execute(
-                            """
-                            INSERT INTO eligibility_criteria (
-                                id, scholarship_id, criteria_type, criteria_value, is_mandatory
-                            ) VALUES (%s, %s, %s, %s, %s)
-                            """,
-                            (
-                                str(uuid.uuid4()),
-                                scholarship_id,
-                                criteria["type"],
-                                criteria["value"],
-                                criteria.get("mandatory", True),
-                            ),
-                        )
-                        eligibility_created += 1
-                    except Exception as e:
-                        print(f"    ! Eligibility error: {e}")
             else:
                 print(f"  ~ Exists: {scholarship['name']}")
+
+            # Insert eligibility criteria (always try, even for existing scholarships)
+            for criteria in eligibility_criteria:
+                try:
+                    cursor.execute(
+                        """
+                        INSERT INTO eligibility_criteria (
+                            id, scholarship_id, criterion_type, criterion_value, is_mandatory
+                        ) VALUES (%s, %s, %s, %s, %s)
+                        ON DUPLICATE KEY UPDATE
+                            criterion_value = VALUES(criterion_value),
+                            is_mandatory = VALUES(is_mandatory)
+                        """,
+                        (
+                            str(uuid.uuid4()),
+                            actual_sid,
+                            criteria["type"],
+                            criteria["value"],
+                            criteria.get("mandatory", True),
+                        ),
+                    )
+                    eligibility_created += 1
+                except Exception as e:
+                    print(f"    ! Eligibility error: {e}")
 
         except Exception as e:
             print(f"  ! Error seeding {scholarship['name']}: {e}")

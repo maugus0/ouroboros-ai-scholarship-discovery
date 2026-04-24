@@ -15,7 +15,7 @@ Usage:
 
 import sys
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 
 import mysql.connector
@@ -700,30 +700,46 @@ def seed():
                     scholarship["deadline"],
                     scholarship["description"],
                     scholarship["source_url"],
-                    datetime.utcnow(),
+                    datetime.now(timezone.utc),
                 ),
             )
+            conn.commit()
+
+            # Get the actual scholarship ID (in case ON DUPLICATE KEY UPDATE was triggered)
+            cursor.execute(
+                "SELECT id FROM scholarships WHERE source_url = %s",
+                (scholarship["source_url"],),
+            )
+            result = cursor.fetchone()
+            actual_sid = result[0] if result else sid
+
             scholarships_created += 1
             print(f"  ✓ Seeded: {scholarship['name']}")
 
             # Insert eligibility criteria
             for criterion in scholarship.get("eligibility", []):
                 cid = str(uuid.uuid4())
-                cursor.execute(
-                    """
-                    INSERT INTO eligibility_criteria 
-                        (id, scholarship_id, criterion_type, criterion_value, is_mandatory)
-                    VALUES (%s, %s, %s, %s, %s)
-                    """,
-                    (
-                        cid,
-                        sid,
-                        criterion["type"],
-                        criterion["value"],
-                        criterion.get("mandatory", True),
-                    ),
-                )
-                criteria_created += 1
+                try:
+                    cursor.execute(
+                        """
+                        INSERT INTO eligibility_criteria 
+                            (id, scholarship_id, criterion_type, criterion_value, is_mandatory)
+                        VALUES (%s, %s, %s, %s, %s)
+                        ON DUPLICATE KEY UPDATE
+                            criterion_value = VALUES(criterion_value),
+                            is_mandatory = VALUES(is_mandatory)
+                        """,
+                        (
+                            cid,
+                            actual_sid,
+                            criterion["type"],
+                            criterion["value"],
+                            criterion.get("mandatory", True),
+                        ),
+                    )
+                    criteria_created += 1
+                except Exception as crit_exc:
+                    print(f"    ! Criterion error: {crit_exc}")
 
         except Exception as exc:
             print(f"  ✗ Error seeding {scholarship['name']}: {exc}")
