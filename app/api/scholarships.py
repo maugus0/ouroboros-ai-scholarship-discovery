@@ -139,6 +139,8 @@ def _to_agent_reasoning(reasoning: Optional[dict[str, Any]]) -> Optional[Scholar
         matching_breakdown.append(breakdown)
 
     summary = reasoning.get("eligibility_summary", {})
+    if not isinstance(summary, dict):
+        summary = {}
     eligibility_summary = EligibilitySummary(
         total_scholarships_evaluated=summary.get("total_scholarships_evaluated", 0),
         fully_eligible=summary.get("fully_eligible", 0),
